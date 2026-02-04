@@ -1,0 +1,6 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/poseidon2-targets.cmake")
+
+check_required_components(poseidon2)
+

@@ -49,6 +49,24 @@
     #define P3_ASSERT(cond) assert(cond)
 #endif
 
+// CUDA error checking macro (host-only)
+#if P3_CUDA_ENABLED
+    #include <cuda_runtime.h>
+    #include <stdexcept>
+    #include <string>
+    #define P3_CUDA_CHECK(call) \
+        do { \
+            cudaError_t err = call; \
+            if (err != cudaSuccess) { \
+                throw std::runtime_error(std::string("CUDA error at ") + __FILE__ + ":" + \
+                    std::to_string(__LINE__) + ": " + cudaGetErrorString(err)); \
+            } \
+        } while(0)
+#else
+    // No-op for non-CUDA builds
+    #define P3_CUDA_CHECK(call) (call)
+#endif
+
 // Utilities for 128-bit arithmetic on GPU (since __uint128_t is not available)
 namespace p3_field {
 namespace cuda_util {

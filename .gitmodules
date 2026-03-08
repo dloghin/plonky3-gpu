@@ -1,0 +1,3 @@
+[submodule "plonky3"]
+	path = plonky3
+	url = git@github.com:dloghin/Plonky3.git

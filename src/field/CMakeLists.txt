@@ -43,6 +43,12 @@ if(BUILD_BENCHMARKS)
     add_subdirectory(benches)
 endif()
 
+# Tests
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
 # Installation
 install(DIRECTORY include/
     DESTINATION include

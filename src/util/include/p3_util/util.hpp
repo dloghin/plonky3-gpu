@@ -134,7 +134,7 @@ void reverse_slice_index_bits(std::vector<T>& vals) {
     size_t n = vals.size();
     if (n == 0 || n == 1) return;
 
-    if (n != 0 && (n & (n - 1)) != 0) {
+    if ((n & (n - 1)) != 0) {
         throw std::invalid_argument("reverse_slice_index_bits: size must be a power of 2");
     }
 

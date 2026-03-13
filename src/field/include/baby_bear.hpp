@@ -3,6 +3,7 @@
 #include "field.hpp"
 #include "cuda_compat.hpp"
 #include <cstdint>
+#include <array>
 
 #if !P3_CUDA_ENABLED
 #include <iostream>
@@ -26,6 +27,14 @@ private:
 public:
     static constexpr uint32_t PRIME = 0x78000001; // 2^31 - 2^27 + 1
     static constexpr uint64_t PRIME_U64 = PRIME;
+
+    // Two-adic field constants
+    // p - 1 = 2^27 * 15, so the 2-adicity is 27
+    static constexpr size_t TWO_ADICITY = 27;
+
+    // Multiplicative group generator (primitive root of F_p*)
+    // 31 is a primitive root modulo p
+    static constexpr uint32_t GENERATOR_VAL = 31;
 
     // Constructors
     P3_HOST_DEVICE P3_CONSTEXPR_HD BabyBear() : value_(0) {}
@@ -101,6 +110,58 @@ public:
         return exp_u64(1725656503);
     }
 
+    // Returns the multiplicative group generator
+    P3_HOST_DEVICE static BabyBear generator() {
+        return BabyBear(static_cast<uint32_t>(GENERATOR_VAL));
+    }
+
+    // Returns a primitive 2^bits-th root of unity.
+    // The primitive 2^27-th root is 440564289.
+    // For smaller bits k, the generator is g^(2^(27-k)).
+    P3_HOST_DEVICE static BabyBear two_adic_generator(size_t bits) {
+#if !P3_CUDA_ENABLED
+        if (bits > TWO_ADICITY) {
+            throw std::invalid_argument("bits exceeds TWO_ADICITY (27) for BabyBear");
+        }
+#endif
+        // Primitive 2^27-th root of unity
+        BabyBear g(static_cast<uint32_t>(440564289u));
+        // Raise to 2^(27-bits) to get primitive 2^bits-th root
+        uint64_t exp = static_cast<uint64_t>(1) << (TWO_ADICITY - bits);
+        return g.exp_u64(exp);
+    }
+
+    // Returns a primitive 2^bits-th root of unity as a degree-4 extension field element.
+    // For bits <= 27: embeds the base field generator.
+    // For bits == 28: [0, 0, 929455875, 0] (i.e., 929455875 * alpha^2).
+    // For bits == 29: [0, 0, 0, 1483681942] (i.e., 1483681942 * alpha^3).
+    // These are computed such that they are valid generators for the degree-4 extension
+    // BinomialExtensionField<BabyBear, 4> with minimal polynomial x^4 - 11.
+    static std::array<BabyBear, 4> ext_two_adic_generator(size_t bits) {
+#if !P3_CUDA_ENABLED
+        if (bits > 29) {
+            throw std::invalid_argument("bits exceeds EXT_TWO_ADICITY (29) for BinomialExtensionField<BabyBear,4>");
+        }
+#endif
+        if (bits <= TWO_ADICITY) {
+            // Embed base field generator into extension field
+            return {two_adic_generator(bits), BabyBear(), BabyBear(), BabyBear()};
+        } else if (bits == 28) {
+            // Primitive 2^28-th root: 929455875 * alpha^2
+            return {BabyBear(), BabyBear(), BabyBear(static_cast<uint32_t>(929455875u)), BabyBear()};
+        } else { // bits == 29
+            // Primitive 2^29-th root: 1483681942 * alpha^3
+            return {BabyBear(), BabyBear(), BabyBear(), BabyBear(static_cast<uint32_t>(1483681942u))};
+        }
+    }
+
+    // Powers iterator: yields this^0, this^1, this^2, ...
+    // Forward-declare the return type; defined after the class.
+#if !P3_CUDA_ENABLED
+    struct PowersRange;
+    PowersRange powers() const;
+#endif
+
     // Display (CPU only)
 #if !P3_CUDA_ENABLED
     friend std::ostream& operator<<(std::ostream& os, const BabyBear& field) {
@@ -153,6 +214,31 @@ inline const BabyBear BabyBear::ZERO = BabyBear();
 inline const BabyBear BabyBear::ONE = BabyBear(static_cast<uint32_t>(1));
 inline const BabyBear BabyBear::TWO = BabyBear(static_cast<uint32_t>(2));
 inline const BabyBear BabyBear::NEG_ONE = BabyBear(PRIME - 1);
+
+// PowersRange: lazy infinite iterator over successive powers of a BabyBear element.
+// Yields: base^0, base^1, base^2, ...
+struct BabyBear::PowersRange {
+    BabyBear base;
+
+    struct Iterator {
+        BabyBear current;
+        BabyBear base_val;
+
+        explicit Iterator(BabyBear b)
+            : current(BabyBear(static_cast<uint32_t>(1u))), base_val(b) {}
+
+        BabyBear operator*() const { return current; }
+        Iterator& operator++() { current = current * base_val; return *this; }
+        bool operator!=(const Iterator&) const { return true; } // infinite range sentinel
+    };
+
+    Iterator begin() const { return Iterator(base); }
+    Iterator end()   const { return Iterator(base); }
+};
+
+inline BabyBear::PowersRange BabyBear::powers() const {
+    return PowersRange{*this};
+}
 #endif
 
 // Device constants for CUDA (must be defined in a .cu file if needed)

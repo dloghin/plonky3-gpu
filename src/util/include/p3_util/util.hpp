@@ -176,9 +176,12 @@ void apply_to_chunks(const std::vector<T>& input, Func func) {
 template<size_t N, typename T>
 std::vector<std::array<T, N>> iter_array_chunks_padded(const std::vector<T>& input,
                                                         const T& pad_val) {
+    static_assert(N > 0, "iter_array_chunks_padded requires N > 0");
+
     std::vector<std::array<T, N>> result;
     size_t total = input.size();
-    size_t num_chunks = (total + N - 1) / N;
+    // Overflow-safe ceil(total / N): avoids (total + N - 1) overflow.
+    size_t num_chunks = total / N + ((total % N) != 0 ? 1u : 0u);
     result.reserve(num_chunks);
 
     for (size_t chunk = 0; chunk < num_chunks; ++chunk) {

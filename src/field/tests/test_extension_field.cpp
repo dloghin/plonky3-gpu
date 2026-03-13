@@ -126,8 +126,8 @@ TEST(BabyBearExt4Arithmetic, AddAssign) {
 
 TEST(BabyBearExt4Arithmetic, AddZero) {
     Ext4 a = make(1, 2, 3, 4);
-    expect_eq(a + Ext4::ZERO, 1, 2, 3, 4);
-    expect_eq(Ext4::ZERO + a, 1, 2, 3, 4);
+    EXPECT_EQ(a + Ext4::ZERO, a);
+    EXPECT_EQ(Ext4::ZERO + a, a);
 }
 
 // ---------------------------------------------------------------------------

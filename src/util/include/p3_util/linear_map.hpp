@@ -2,8 +2,6 @@
 
 #include <vector>
 #include <utility>
-#include <functional>
-#include <optional>
 
 namespace p3_util {
 

@@ -1,11 +1,9 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
 #include <cassert>
 #include <stdexcept>
 #include <vector>
-#include <functional>
 #include <array>
 
 namespace p3_util {

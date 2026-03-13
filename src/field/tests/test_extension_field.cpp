@@ -388,11 +388,11 @@ TEST(BabyBearExt4Powers, PowersVector) {
     Ext4 a = make(2, 1, 0, 0);
     auto pows = a.powers(5);
     ASSERT_EQ(pows.size(), 5u);
-    EXPECT_EQ(pows[0], Ext4::ONE);
-    EXPECT_EQ(pows[1], a);
-    EXPECT_EQ(pows[2], a.square());
-    EXPECT_EQ(pows[3], a.square() * a);
-    EXPECT_EQ(pows[4], a.square().square());
+    Ext4 current_power = Ext4::ONE;
+    for (const auto& p : pows) {
+        EXPECT_EQ(p, current_power);
+        current_power *= a;
+    }
 }
 
 // ---------------------------------------------------------------------------

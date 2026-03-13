@@ -461,11 +461,3 @@ TEST(BabyBearExt4Axioms, NEG_ONE) {
     EXPECT_EQ(Ext4::ONE + Ext4::NEG_ONE, Ext4::ZERO);
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-
-int main(int argc, char** argv) {
-    testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

@@ -202,8 +202,14 @@ public:
     // D-th root of unity in F_p: z = W^((p-1)/D) mod p.
     // This is the Frobenius image of the extension generator alpha: phi(alpha) = z * alpha.
     P3_HOST_DEVICE static F dth_root() {
+#if !P3_CUDA_ENABLED
+        static const F cached = F(static_cast<uint32_t>(BINOMIAL_W))
+            .exp_u64((static_cast<uint64_t>(F::PRIME) - 1u) / static_cast<uint64_t>(D));
+        return cached;
+#else
         return F(static_cast<uint32_t>(BINOMIAL_W))
                    .exp_u64((static_cast<uint64_t>(F::PRIME) - 1u) / static_cast<uint64_t>(D));
+#endif
     }
 
     // Frobenius automorphism: phi(a) = a^p.
@@ -393,7 +399,7 @@ P3_HOST_DEVICE inline BabyBear4 BabyBear4::inv() const {
     // Frobenius maps (phi^k applied component-wise):
     // phi^1(a)[i] = a[i] * z^i
     BabyBear4 pa({coeffs[0], coeffs[1] * z, coeffs[2] * z2, coeffs[3] * z3});
-    // phi^2(a)[i] = a[i] * z^(2i)  -- z^4=1 so z^4=1, z^6=z^2
+    // phi^2(a)[i] = a[i] * z^(2i)  -- z^4=1 so z^4=1, z^6=z^2  (z^4=1 => z^6=z^2)
     BabyBear4 p2a({coeffs[0], coeffs[1] * z2, coeffs[2], coeffs[3] * z2});
     // phi^3(a)[i] = a[i] * z^(3i)  -- z^6=z^2, z^9=z
     BabyBear4 p3a({coeffs[0], coeffs[1] * z3, coeffs[2] * z2, coeffs[3] * z});

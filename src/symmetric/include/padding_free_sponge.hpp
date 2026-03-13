@@ -19,6 +19,7 @@
 
 #include "hash.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -59,25 +60,16 @@ public:
     Hash<F, OUT> hash_iter(const std::vector<F>& input) const {
         std::array<F, WIDTH> state{};
 
+        // Absorb input in RATE-sized chunks, always applying at least one permutation.
+        // An empty input absorbs a single all-zero block.
         size_t pos = 0;
-        while (pos < input.size()) {
-            // Fill up to RATE elements from input
+        do {
             size_t chunk_size = std::min(RATE, input.size() - pos);
-            for (size_t i = 0; i < chunk_size; ++i) {
-                state[i] = input[pos + i];
-            }
-            // Zero any remaining slots in the rate window
-            for (size_t i = chunk_size; i < RATE; ++i) {
-                state[i] = F();
-            }
+            std::copy_n(input.begin() + pos, chunk_size, state.begin());
+            std::fill(state.begin() + chunk_size, state.begin() + RATE, F());
             permutation_.permute_mut(state);
             pos += chunk_size;
-        }
-
-        // If input was empty, still apply the permutation once (absorb zero block)
-        if (input.empty()) {
-            permutation_.permute_mut(state);
-        }
+        } while (pos < input.size());
 
         Hash<F, OUT> digest;
         for (size_t i = 0; i < OUT; ++i) {

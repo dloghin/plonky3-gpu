@@ -38,12 +38,6 @@ using namespace poseidon2;
  */
 template <size_t WIDTH>
 struct AddIndexPermutation {
-    void permute_mut(std::array<BabyBear, WIDTH>& state) {
-        for (size_t i = 0; i < WIDTH; ++i) {
-            state[i] += BabyBear(static_cast<uint32_t>(i + 1));
-        }
-    }
-
     void permute_mut(std::array<BabyBear, WIDTH>& state) const {
         for (size_t i = 0; i < WIDTH; ++i) {
             state[i] += BabyBear(static_cast<uint32_t>(i + 1));
@@ -58,8 +52,6 @@ struct AddIndexPermutation {
  */
 template <size_t WIDTH>
 struct IdentityPermutation {
-    void permute_mut(std::array<BabyBear, WIDTH>& /* state */) {}
-
     void permute_mut(std::array<BabyBear, WIDTH>& /* state */) const {}
 };
 
@@ -265,9 +257,7 @@ TEST(TruncatedPermutation, DifferentInputsDifferentOutputs) {
     auto oa = comp.compress(input_a);
     auto ob = comp.compress(input_b);
 
-    (void)oa;
-    (void)ob;
-    SUCCEED();
+    EXPECT_NE(oa, ob) << "Different inputs should yield different outputs";
 }
 
 TEST(TruncatedPermutation, OutputSizeCorrect) {
@@ -329,10 +319,6 @@ static auto make_poseidon2_babybear_16() {
 // Thin wrapper so Poseidon2 satisfies our permutation concept (value semantics).
 struct Poseidon2BabyBear16Wrapper {
     std::shared_ptr<Poseidon2<BabyBear, BabyBear, 16, 7>> perm;
-
-    void permute_mut(std::array<BabyBear, 16>& state) {
-        perm->permute_mut(state);
-    }
 
     void permute_mut(std::array<BabyBear, 16>& state) const {
         perm->permute_mut(state);

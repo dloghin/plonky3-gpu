@@ -23,6 +23,7 @@
 
 #include "hash.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 
@@ -64,17 +65,13 @@ public:
         std::array<F, WIDTH> state{};
         // Copy input chunks into state
         for (size_t n = 0; n < N; ++n) {
-            for (size_t c = 0; c < CHUNK; ++c) {
-                state[n * CHUNK + c] = input[n][c];
-            }
+            std::copy_n(input[n].begin(), CHUNK, state.begin() + n * CHUNK);
         }
         // Apply permutation
         permutation_.permute_mut(state);
         // Truncate to first CHUNK elements
         Hash<F, CHUNK> out;
-        for (size_t i = 0; i < CHUNK; ++i) {
-            out[i] = state[i];
-        }
+        std::copy_n(state.begin(), CHUNK, out.begin());
         return out;
     }
 };

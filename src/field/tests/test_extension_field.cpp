@@ -11,7 +11,7 @@
 #include "baby_bear.hpp"
 
 using namespace p3_field;
-using Ext4 = BinomialExtensionField<BabyBear, 4>;
+using Ext4 = BabyBear4; // BinomialExtensionField<BabyBear, 4, 11>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -25,10 +25,10 @@ static Ext4 make(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3) {
 }
 
 static void expect_eq(const Ext4& a, uint32_t e0, uint32_t e1, uint32_t e2, uint32_t e3) {
-    EXPECT_EQ(a.value[0].value(), e0) << "coefficient 0 mismatch";
-    EXPECT_EQ(a.value[1].value(), e1) << "coefficient 1 mismatch";
-    EXPECT_EQ(a.value[2].value(), e2) << "coefficient 2 mismatch";
-    EXPECT_EQ(a.value[3].value(), e3) << "coefficient 3 mismatch";
+    EXPECT_EQ(a.coeffs[0].value(), e0) << "coefficient 0 mismatch";
+    EXPECT_EQ(a.coeffs[1].value(), e1) << "coefficient 1 mismatch";
+    EXPECT_EQ(a.coeffs[2].value(), e2) << "coefficient 2 mismatch";
+    EXPECT_EQ(a.coeffs[3].value(), e3) << "coefficient 3 mismatch";
 }
 
 // p = 2013265921
@@ -66,15 +66,15 @@ TEST(BabyBearExt4Constants, Generator) {
 }
 
 TEST(BabyBearExt4Constants, W) {
-    // W = 11 for BabyBear quartic
-    EXPECT_EQ(Ext4::W().value(), 11u);
+    // W = 11 for BabyBear quartic (binomial constant alpha^4 = 11)
+    EXPECT_EQ(Ext4::BINOMIAL_W, 11u);
 }
 
 TEST(BabyBearExt4Constants, DthRoot) {
-    // DTH_ROOT = W^((p-1)/4) = 11^503316480 mod p = 1728404513
-    // This is a primitive 4th root of unity: DTH_ROOT^2 = -1, DTH_ROOT^4 = 1
-    EXPECT_EQ(Ext4::DTH_ROOT().value(), 1728404513u);
-    BabyBear dth = Ext4::DTH_ROOT();
+    // dth_root = W^((p-1)/4) = 11^503316480 mod p = 1728404513
+    // This is a primitive 4th root of unity: dth_root^2 = -1, dth_root^4 = 1
+    EXPECT_EQ(Ext4::dth_root().value(), 1728404513u);
+    BabyBear dth = Ext4::dth_root();
     // DTH_ROOT^2 = p-1 = -1  (primitive 4th root of unity property)
     EXPECT_EQ(dth.exp_u64(2).value(), P - 1);
     // DTH_ROOT^4 = 1  (Frobenius^4 = identity requires this)
@@ -280,7 +280,7 @@ TEST(BabyBearExt4Arithmetic, HalveOdd) {
     // 1 / 2 = inv(2) = (P+1)/2 = 1006632961
     Ext4 one = Ext4::ONE;
     Ext4 h = one.halve();
-    EXPECT_EQ(h.value[0].value(), (P + 1) / 2);
+    EXPECT_EQ(h.coeffs[0].value(), (P + 1) / 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -409,10 +409,10 @@ TEST(BabyBearExt4Frobenius, FrobeniusOfX) {
     // frobenius(0,1,0,0) = (0, DTH_ROOT, 0, 0)
     Ext4 x = make(0, 1, 0, 0);
     Ext4 fx = x.frobenius();
-    EXPECT_EQ(fx.value[0].value(), 0u);
-    EXPECT_EQ(fx.value[1].value(), 1728404513u);  // DTH_ROOT = W^((p-1)/4) mod p
-    EXPECT_EQ(fx.value[2].value(), 0u);
-    EXPECT_EQ(fx.value[3].value(), 0u);
+    EXPECT_EQ(fx.coeffs[0].value(), 0u);
+    EXPECT_EQ(fx.coeffs[1].value(), 1728404513u);  // dth_root = W^((p-1)/4) mod p
+    EXPECT_EQ(fx.coeffs[2].value(), 0u);
+    EXPECT_EQ(fx.coeffs[3].value(), 0u);
 }
 
 TEST(BabyBearExt4Frobenius, FrobeniusIsFieldAuto) {

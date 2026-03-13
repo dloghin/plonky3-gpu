@@ -35,3 +35,21 @@ target_include_directories(field_two_adic_tests PRIVATE
 
 include(GoogleTest)
 gtest_discover_tests(field_two_adic_tests)
+
+# Extension field tests
+add_executable(field_extension_tests
+    test_extension_field.cpp
+)
+
+target_link_libraries(field_extension_tests
+    PRIVATE
+    field
+    GTest::gtest_main
+)
+
+target_include_directories(field_extension_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    ${CMAKE_SOURCE_DIR}/../cuda/include
+)
+
+gtest_discover_tests(field_extension_tests)

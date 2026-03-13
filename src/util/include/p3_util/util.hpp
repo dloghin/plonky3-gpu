@@ -189,7 +189,7 @@ std::vector<std::array<T, N>> iter_array_chunks_padded(const std::vector<T>& inp
             size_t idx = chunk * N + i;
             arr[i] = (idx < total) ? input[idx] : pad_val;
         }
-        result.push_back(arr);
+        result.push_back(std::move(arr));
     }
     return result;
 }

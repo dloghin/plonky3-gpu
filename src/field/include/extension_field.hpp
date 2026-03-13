@@ -36,16 +36,13 @@ public:
     std::array<F, D> coeffs;
 
     // Constructors
-    P3_HOST_DEVICE BinomialExtensionField() : coeffs{} {
-        for (size_t i = 0; i < D; ++i) coeffs[i] = F();
-    }
+    P3_HOST_DEVICE BinomialExtensionField() : coeffs{} {}
 
     P3_HOST_DEVICE explicit BinomialExtensionField(const std::array<F, D>& c) : coeffs(c) {}
 
     // Construct from base field element (embeds f as [f, 0, 0, ...])
     P3_HOST_DEVICE explicit BinomialExtensionField(const F& f) : coeffs{} {
         coeffs[0] = f;
-        for (size_t i = 1; i < D; ++i) coeffs[i] = F();
     }
 
     // Access
@@ -132,13 +129,39 @@ public:
     }
 
     P3_HOST_DEVICE BinomialExtensionField& operator+=(const BinomialExtensionField& other) {
-        *this = *this + other; return *this;
+        for (size_t i = 0; i < D; ++i) {
+            coeffs[i] = coeffs[i] + other.coeffs[i];
+        }
+        return *this;
     }
     P3_HOST_DEVICE BinomialExtensionField& operator-=(const BinomialExtensionField& other) {
-        *this = *this - other; return *this;
+        for (size_t i = 0; i < D; ++i) {
+            coeffs[i] = coeffs[i] - other.coeffs[i];
+        }
+        return *this;
     }
     P3_HOST_DEVICE BinomialExtensionField& operator*=(const BinomialExtensionField& other) {
-        *this = *this * other; return *this;
+        // Copy original coefficients so we can accumulate into this instance safely.
+        std::array<F, D> a = coeffs;
+
+        // Recompute product in-place using schoolbook multiplication with reduction.
+        BinomialExtensionField result;
+        F w(static_cast<uint32_t>(W));
+        for (size_t i = 0; i < D; ++i) {
+            for (size_t j = 0; j < D; ++j) {
+                F prod = a[i] * other.coeffs[j];
+                size_t idx = i + j;
+                if (idx < D) {
+                    result.coeffs[idx] = result.coeffs[idx] + prod;
+                } else {
+                    // alpha^(D+k) = W * alpha^k
+                    result.coeffs[idx - D] = result.coeffs[idx - D] + prod * w;
+                }
+            }
+        }
+
+        coeffs = result.coeffs;
+        return *this;
     }
 
     P3_HOST_DEVICE BinomialExtensionField square() const { return *this * *this; }
@@ -262,8 +285,8 @@ inline BabyBear4 BabyBear4::inv() const {
     }
 #endif
 
-    // z = 11^((p-1)/4) mod p  -- a primitive 4th root of unity in F_p
-    BB z = BB(static_cast<uint32_t>(11u)).exp_u64((p - 1) / 4);
+    // z = W^((p-1)/4) mod p  -- a primitive 4th root of unity in F_p
+    BB z = BB(static_cast<uint32_t>(BabyBear4::BINOMIAL_W)).exp_u64((p - 1) / 4);
     BB z2 = z * z;
     BB z3 = z2 * z;
 

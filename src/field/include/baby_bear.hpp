@@ -36,6 +36,13 @@ public:
     // 31 is a primitive root modulo p
     static constexpr uint32_t GENERATOR_VAL = 31;
 
+    // Primitive 2^27-th root of unity in F_p
+    static constexpr uint32_t ROOT_OF_UNITY_2_POW_27 = 440564289u;
+
+    // Extension-field primitive roots used for bits=28,29 in BabyBear^4
+    static constexpr uint32_t EXT_ROOT_2_POW_28_COEFF = 929455875u;
+    static constexpr uint32_t EXT_ROOT_2_POW_29_COEFF = 1483681942u;
+
     // Constructors
     P3_HOST_DEVICE P3_CONSTEXPR_HD BabyBear() : value_(0) {}
     P3_HOST_DEVICE P3_CONSTEXPR_HD explicit BabyBear(uint32_t value) : value_(reduce(value)) {}
@@ -119,13 +126,16 @@ public:
     // The primitive 2^27-th root is 440564289.
     // For smaller bits k, the generator is g^(2^(27-k)).
     P3_HOST_DEVICE static BabyBear two_adic_generator(size_t bits) {
+        // Bounds check: bits must be in [0, TWO_ADICITY]
 #if !P3_CUDA_ENABLED
         if (bits > TWO_ADICITY) {
             throw std::invalid_argument("bits exceeds TWO_ADICITY (27) for BabyBear");
         }
+#else
+        P3_ASSERT(bits <= TWO_ADICITY);
 #endif
         // Primitive 2^27-th root of unity
-        BabyBear g(static_cast<uint32_t>(440564289u));
+        BabyBear g(static_cast<uint32_t>(ROOT_OF_UNITY_2_POW_27));
         // Raise to 2^(27-bits) to get primitive 2^bits-th root
         uint64_t exp = static_cast<uint64_t>(1) << (TWO_ADICITY - bits);
         return g.exp_u64(exp);
@@ -148,11 +158,15 @@ public:
             return {two_adic_generator(bits), BabyBear(), BabyBear(), BabyBear()};
         } else if (bits == 28) {
             // Primitive 2^28-th root: 929455875 * alpha^2
-            return {BabyBear(), BabyBear(), BabyBear(static_cast<uint32_t>(929455875u)), BabyBear()};
-        } else { // bits == 29
+            return {BabyBear(), BabyBear(), BabyBear(static_cast<uint32_t>(EXT_ROOT_2_POW_28_COEFF)), BabyBear()};
+        } else if (bits == 29) {
             // Primitive 2^29-th root: 1483681942 * alpha^3
-            return {BabyBear(), BabyBear(), BabyBear(), BabyBear(static_cast<uint32_t>(1483681942u))};
+            return {BabyBear(), BabyBear(), BabyBear(), BabyBear(static_cast<uint32_t>(EXT_ROOT_2_POW_29_COEFF))};
         }
+
+        // Fallback for unexpected values (especially important on CUDA builds)
+        P3_ASSERT(false);
+        return {BabyBear(), BabyBear(), BabyBear(), BabyBear()};
     }
 
     // Powers iterator: yields this^0, this^1, this^2, ...

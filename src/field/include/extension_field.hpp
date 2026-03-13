@@ -141,26 +141,7 @@ public:
         return *this;
     }
     P3_HOST_DEVICE BinomialExtensionField& operator*=(const BinomialExtensionField& other) {
-        // Copy original coefficients so we can accumulate into this instance safely.
-        std::array<F, D> a = coeffs;
-
-        // Recompute product in-place using schoolbook multiplication with reduction.
-        BinomialExtensionField result;
-        F w(static_cast<uint32_t>(W));
-        for (size_t i = 0; i < D; ++i) {
-            for (size_t j = 0; j < D; ++j) {
-                F prod = a[i] * other.coeffs[j];
-                size_t idx = i + j;
-                if (idx < D) {
-                    result.coeffs[idx] = result.coeffs[idx] + prod;
-                } else {
-                    // alpha^(D+k) = W * alpha^k
-                    result.coeffs[idx - D] = result.coeffs[idx - D] + prod * w;
-                }
-            }
-        }
-
-        coeffs = result.coeffs;
+        *this = *this * other;
         return *this;
     }
 
@@ -239,7 +220,7 @@ BinomialExtensionField<F, D, W>::powers() const {
 #endif
 
 // ---------------------------------------------------------------------------
-// Inverse: general fallback (Fermat's little theorem in the extension)
+// Inverse: not implemented for general case.
 // For small D and known primes this is acceptable; specialisations can override.
 // Note: for D=4, BabyBear, we provide a more efficient Frobenius-based impl below.
 // ---------------------------------------------------------------------------
@@ -276,13 +257,11 @@ inline BabyBear4 BabyBear4::inv() const {
     constexpr uint32_t p = BB::PRIME;
 
 #if !P3_CUDA_ENABLED
-    bool is_zero = true;
-    for (size_t i = 0; i < 4; ++i) {
-        if (coeffs[i] != BB()) { is_zero = false; break; }
-    }
-    if (is_zero) {
+    if (*this == zero_val()) {
         throw std::runtime_error("Cannot invert zero in BabyBear4");
     }
+#else
+    P3_ASSERT(*this != zero_val());
 #endif
 
     // z = W^((p-1)/4) mod p  -- a primitive 4th root of unity in F_p

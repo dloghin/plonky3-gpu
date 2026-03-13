@@ -4,39 +4,19 @@
 #include <cmath>
 #include <algorithm>
 
+// Pull in the canonical implementations from p3_util.
+// Functions reverse_bits_len and log2_strict_usize now live in that library;
+// we expose them here under the p3_matrix namespace for backwards compatibility.
+// The p3_util include directory is added by the CMake dependency on p3_util.
+#include "p3_util/util.hpp"
+
 namespace p3_matrix {
 
-/**
- * @brief Reverse bits of an integer for a given bit length
- * @param n Number to reverse
- * @param bits Number of bits to consider
- * @return Bit-reversed number
- */
-inline size_t reverse_bits_len(size_t n, size_t bits) {
-    size_t result = 0;
-    for (size_t i = 0; i < bits; ++i) {
-        result = (result << 1) | (n & 1);
-        n >>= 1;
-    }
-    return result;
-}
+using p3_util::reverse_bits_len;
 
-/**
- * @brief Compute log base 2 of a number (must be power of 2)
- * @param n Number (must be power of 2)
- * @return log2(n)
- * @throws std::invalid_argument if n is not a power of 2
- */
+/// Backwards-compatible alias for p3_util::log2_strict_usize.
 inline size_t log2_strict(size_t n) {
-    if (n == 0 || (n & (n - 1)) != 0) {
-        throw std::invalid_argument("Value must be a power of 2");
-    }
-    size_t log = 0;
-    while (n > 1) {
-        n >>= 1;
-        ++log;
-    }
-    return log;
+    return p3_util::log2_strict_usize(n);
 }
 
 /**

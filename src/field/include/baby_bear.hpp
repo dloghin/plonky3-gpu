@@ -147,11 +147,13 @@ public:
     // For bits == 29: [0, 0, 0, 1483681942] (i.e., 1483681942 * alpha^3).
     // These are computed such that they are valid generators for the degree-4 extension
     // BinomialExtensionField<BabyBear, 4> with minimal polynomial x^4 - 11.
-    static std::array<BabyBear, 4> ext_two_adic_generator(size_t bits) {
+    P3_HOST_DEVICE static std::array<BabyBear, 4> ext_two_adic_generator(size_t bits) {
 #if !P3_CUDA_ENABLED
         if (bits > 29) {
             throw std::invalid_argument("bits exceeds EXT_TWO_ADICITY (29) for BinomialExtensionField<BabyBear,4>");
         }
+#else
+        P3_ASSERT(bits <= 29);
 #endif
         if (bits <= TWO_ADICITY) {
             // Embed base field generator into extension field
@@ -229,8 +231,11 @@ inline const BabyBear BabyBear::ONE = BabyBear(static_cast<uint32_t>(1));
 inline const BabyBear BabyBear::TWO = BabyBear(static_cast<uint32_t>(2));
 inline const BabyBear BabyBear::NEG_ONE = BabyBear(PRIME - 1);
 
-// PowersRange: lazy infinite iterator over successive powers of a BabyBear element.
+// PowersRange: lazy infinite sequence of successive powers of a BabyBear element.
 // Yields: base^0, base^1, base^2, ...
+// Use begin() to obtain an Iterator and advance it manually with ++.
+// There is intentionally no end() — this prevents accidental use in range-based
+// for loops, which would loop forever. Use an explicit counter instead.
 struct BabyBear::PowersRange {
     BabyBear base;
 
@@ -243,11 +248,11 @@ struct BabyBear::PowersRange {
 
         BabyBear operator*() const { return current; }
         Iterator& operator++() { current = current * base_val; return *this; }
-        bool operator!=(const Iterator&) const { return true; } // infinite range sentinel
+        bool operator!=(const Iterator& other) const { return current != other.current; }
     };
 
     Iterator begin() const { return Iterator(base); }
-    Iterator end()   const { return Iterator(base); }
+    // No end(): this is an infinite range. Use begin() + manual counting.
 };
 
 inline BabyBear::PowersRange BabyBear::powers() const {

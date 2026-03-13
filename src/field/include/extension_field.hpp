@@ -161,12 +161,8 @@ public:
     }
 
     // Multiplicative inverse using Frobenius automorphism + norm.
-    // For F[alpha]/(alpha^D - W), the inverse of `a` is
-    //   a^(-1) = (a^p * a^(p^2) * a^(p^3)) / norm(a)
-    // where norm(a) = a * a^p * a^(p^2) * a^(p^3) lies in F.
-    //
-    // This specialization is for D=4 over BabyBear; for other combinations
-    // a fallback (Fermat) approach is used.
+    // Implemented only for BabyBear4 (D=4, W=11) via a full template specialization.
+    // Calling this on any other instantiation will throw on CPU or trap on GPU.
     P3_HOST_DEVICE BinomialExtensionField inv() const;
 
     // Powers iterator: lazy infinite range yielding base^0, base^1, base^2, ...
@@ -191,6 +187,10 @@ public:
 // ---------------------------------------------------------------------------
 // Powers iterator (defined after class is complete)
 // ---------------------------------------------------------------------------
+// PowersRange is an infinite lazy sequence: base^0, base^1, base^2, ...
+// Use begin() to obtain an Iterator and advance it manually with ++.
+// There is intentionally no end() — this prevents accidental use in range-based
+// for loops, which would loop forever. Use an explicit counter instead.
 #if !P3_CUDA_ENABLED
 template<typename F, size_t D, uint32_t W>
 struct BinomialExtensionField<F, D, W>::PowersRange {
@@ -205,11 +205,11 @@ struct BinomialExtensionField<F, D, W>::PowersRange {
 
         BinomialExtensionField operator*() const { return current; }
         Iterator& operator++() { current = current * base_val; return *this; }
-        bool operator!=(const Iterator&) const { return true; }
+        bool operator!=(const Iterator& other) const { return current != other.current; }
     };
 
     Iterator begin() const { return Iterator(base); }
-    Iterator end()   const { return Iterator(base); }
+    // No end(): this is an infinite range. Use begin() + manual counting.
 };
 
 template<typename F, size_t D, uint32_t W>
@@ -220,17 +220,17 @@ BinomialExtensionField<F, D, W>::powers() const {
 #endif
 
 // ---------------------------------------------------------------------------
-// Inverse: not implemented for general case.
-// For small D and known primes this is acceptable; specialisations can override.
-// Note: for D=4, BabyBear, we provide a more efficient Frobenius-based impl below.
+// Inverse: not implemented for the general case.
+// Only BabyBear4 is supported via the full specialization defined below.
+// Any other instantiation will throw on CPU or trap on GPU.
 // ---------------------------------------------------------------------------
 template<typename F, size_t D, uint32_t W>
 P3_HOST_DEVICE BinomialExtensionField<F, D, W>
 BinomialExtensionField<F, D, W>::inv() const {
-    // Use Frobenius method for D=4 over BabyBear -- specialised below.
-    // For the general case: fall through (this should not be called for unsupported types).
 #if !P3_CUDA_ENABLED
     throw std::runtime_error("BinomialExtensionField::inv() not implemented for this type");
+#else
+    P3_ASSERT(false); // should not reach here on GPU
 #endif
     return zero_val();
 }
@@ -252,7 +252,7 @@ using BabyBear4 = BinomialExtensionField<BabyBear, 4, 11>;
 // norm(a) = a * phi(a) * phi^2(a) * phi^3(a) ∈ F_p
 // a^(-1) = phi(a) * phi^2(a) * phi^3(a) * norm(a)^(-1)
 template<>
-inline BabyBear4 BabyBear4::inv() const {
+P3_HOST_DEVICE inline BabyBear4 BabyBear4::inv() const {
     using BB = BabyBear;
     constexpr uint32_t p = BB::PRIME;
 
@@ -281,6 +281,17 @@ inline BabyBear4 BabyBear4::inv() const {
     BabyBear4 a_pa   = (*this) * pa;
     BabyBear4 p2_p3a = p2a * p3a;
     BabyBear4 norm_ext = a_pa * p2_p3a;
+
+    // Sanity check: norm must lie in F_p — higher coefficients must be zero.
+    // A failure here indicates a bug in the Frobenius computation above.
+#if !P3_CUDA_ENABLED
+    if (norm_ext.coeffs[1] != BB() || norm_ext.coeffs[2] != BB() || norm_ext.coeffs[3] != BB()) {
+        throw std::runtime_error("BabyBear4::inv(): internal error - norm not in base field");
+    }
+#else
+    P3_ASSERT(norm_ext.coeffs[1] == BB() && norm_ext.coeffs[2] == BB() && norm_ext.coeffs[3] == BB());
+#endif
+
     BB norm_val = norm_ext.coeffs[0];
 
     // a^(-1) = phi(a)*phi^2(a)*phi^3(a) / norm(a)
@@ -308,7 +319,7 @@ struct TwoAdicExtField<BabyBear, 4, 11> {
     using Ext = BabyBear4;
 
     // Multiplicative group generator of BabyBear4: 6 + alpha = [6, 1, 0, 0]
-    static Ext generator() {
+    P3_HOST_DEVICE static Ext generator() {
         return Ext({BabyBear(static_cast<uint32_t>(6u)),
                     BabyBear(static_cast<uint32_t>(1u)),
                     BabyBear(),
@@ -324,12 +335,14 @@ struct TwoAdicExtField<BabyBear, 4, 11> {
     //
     // The bits=28,29 values were computed from alpha = [0,1,0,0] raised to the
     // odd part of p^4-1, giving a primitive 2^29-th root of unity.
-    static Ext two_adic_generator(size_t bits) {
+    P3_HOST_DEVICE static Ext two_adic_generator(size_t bits) {
 #if !P3_CUDA_ENABLED
         if (bits > TWO_ADICITY) {
             throw std::invalid_argument(
                 "bits exceeds EXT_TWO_ADICITY (29) for BabyBear4");
         }
+#else
+        P3_ASSERT(bits <= TWO_ADICITY);
 #endif
         auto arr = BabyBear::ext_two_adic_generator(bits);
         return Ext(arr);

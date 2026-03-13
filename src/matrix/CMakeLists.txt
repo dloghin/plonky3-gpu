@@ -25,12 +25,16 @@ endif()
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Bring in p3_util (header-only, sibling directory)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../util util_build)
+
 # Header-only library
 add_library(matrix INTERFACE)
 target_include_directories(matrix INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+target_link_libraries(matrix INTERFACE p3_util)
 
 # CUDA support (optional)
 if(ENABLE_CUDA)

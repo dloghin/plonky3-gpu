@@ -43,7 +43,7 @@ class PaddingFreeSponge {
     static_assert(RATE <= WIDTH, "RATE must be <= WIDTH");
     static_assert(OUT  <= WIDTH, "OUT must be <= WIDTH");
 
-    Perm permutation_;
+    mutable Perm permutation_;
 
 public:
     explicit PaddingFreeSponge(Perm perm) : permutation_(std::move(perm)) {}
@@ -58,10 +58,6 @@ public:
      */
     Hash<F, OUT> hash_iter(const std::vector<F>& input) const {
         std::array<F, WIDTH> state{};
-        // Zero-initialize
-        for (size_t i = 0; i < WIDTH; ++i) {
-            state[i] = F();
-        }
 
         size_t pos = 0;
         while (pos < input.size()) {
@@ -108,6 +104,11 @@ public:
         // Flatten slices into a single stream of field elements, converting
         // via the canonical u32 representation (RawDataSerializable semantics).
         std::vector<F> flat;
+        size_t total_elems = 0;
+        for (const auto& row : slices) {
+            total_elems += row.size();
+        }
+        flat.reserve(total_elems);
         for (const auto& row : slices) {
             for (const auto& elem : row) {
                 // as_canonical_u64() is the canonical representation;

@@ -46,7 +46,7 @@ class TruncatedPermutation {
     static_assert(N * CHUNK <= WIDTH,
         "N * CHUNK must be <= WIDTH to fit all inputs in the state");
 
-    Perm permutation_;
+    mutable Perm permutation_;
 
 public:
     explicit TruncatedPermutation(Perm perm) : permutation_(std::move(perm)) {}
@@ -62,9 +62,6 @@ public:
     ) const {
         // Build state
         std::array<F, WIDTH> state{};
-        for (size_t i = 0; i < WIDTH; ++i) {
-            state[i] = F();
-        }
         // Copy input chunks into state
         for (size_t n = 0; n < N; ++n) {
             for (size_t c = 0; c < CHUNK; ++c) {

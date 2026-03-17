@@ -186,16 +186,18 @@ FriProof<Challenge, FriMmcs, Witness, InputProof> prove_fri(
     std::vector<QueryProof<Challenge, FriMmcs, InputProof>> query_proofs;
     query_proofs.reserve(params.num_queries);
 
+    // Determine log_max_height from the commit_phase_data sizes once, since it is
+    // constant across all queries. The first round's matrix has height =
+    // original_height / arity_0, so log_max_height = log_height(commit_phase_data[0])
+    // + log_arity_0. We reconstruct this by summing arities over all rounds and
+    // adding log_final_height.
+    size_t log_max_height = log_final_height;
+    for (size_t r = 0; r < commit_phase_data.size(); ++r) {
+        log_max_height += params.mmcs.log_width(commit_phase_data[r]);
+    }
+
     for (size_t q = 0; q < params.num_queries; ++q) {
-        // Determine log_max_height from the commit_phase_data sizes.
-        // The first round's matrix has height = original_height / arity_0,
-        // so log_max_height = log_height(commit_phase_data[0]) + log_arity_0.
-        // We reconstruct this by summing arities over all rounds and adding log_final_height.
-        size_t lmh = log_final_height;
-        for (size_t r = 0; r < commit_phase_data.size(); ++r) {
-            lmh += params.mmcs.log_width(commit_phase_data[r]);
-        }
-        size_t query_index = challenger.sample_bits(lmh);
+        size_t query_index = challenger.sample_bits(log_max_height);
 
         // Open input at this index
         InputProof inp_proof;

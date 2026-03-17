@@ -291,16 +291,12 @@ private:
     std::unordered_map<size_t, std::vector<F>> twiddles_;
 
     /**
-     * @brief Compute 1 / 2^log_h in F by repeatedly halving.
+     * @brief Compute 1 / 2^log_h in F using exp_u64 (square-and-multiply).
      */
     static F compute_inv_n(size_t log_h) {
         F two = F::one_val() + F::one_val();
         F inv_two = two.inv();
-        F inv_n = F::one_val();
-        for (size_t i = 0; i < log_h; ++i) {
-            inv_n = inv_n * inv_two;
-        }
-        return inv_n;
+        return inv_two.exp_u64(static_cast<uint64_t>(log_h));
     }
 
     /**

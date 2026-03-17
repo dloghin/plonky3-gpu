@@ -9,7 +9,6 @@
 #include <unordered_map>
 #include <vector>
 #include <cstddef>
-#include <stdexcept>
 
 namespace p3_dft {
 

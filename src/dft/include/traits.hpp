@@ -2,7 +2,6 @@
 
 #include "dense_matrix.hpp"
 #include <cstddef>
-#include <vector>
 
 namespace p3_dft {
 

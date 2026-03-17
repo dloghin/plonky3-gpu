@@ -20,7 +20,6 @@
 
 #include <vector>
 #include <cstdint>
-#include <algorithm>
 
 using namespace p3_field;
 using namespace p3_matrix;

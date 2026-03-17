@@ -408,7 +408,7 @@ TEST(Interpolation, RustCrossValidation_Coset) {
     BB shift(31u);  // BabyBear multiplicative generator
     auto diff_invs = compute_diff_invs(H, shift);
 
-    uint32_t rust_evals[8] = {
+    const std::array<uint32_t, 8> rust_evals = {
         1026, 129027310, 457985035, 994890337,
          902, 1988942953, 1555278970, 913671254,
     };

@@ -44,21 +44,20 @@ std::vector<F> batch_multiplicative_inverse(const std::vector<F>& values) {
     size_t n = values.size();
     if (n == 0) return {};
 
-    // Step 1: prefix products P[i] = values[0] * ... * values[i]
-    std::vector<F> prefix(n);
-    prefix[0] = values[0];
+    // Step 1: store prefix products directly in result to avoid extra allocation.
+    std::vector<F> result(n);
+    result[0] = values[0];
     for (size_t i = 1; i < n; ++i) {
-        prefix[i] = prefix[i - 1] * values[i];
+        result[i] = result[i - 1] * values[i];
     }
 
     // Step 2: invert the product of all values
-    F running_inv = prefix[n - 1].inv();
+    F running_inv = result[n - 1].inv();
 
     // Step 3: walk backwards
-    std::vector<F> result(n);
     for (size_t i = n - 1; i > 0; --i) {
         // inv[i] = prefix[i-1] * running_inv  (= 1 / values[i])
-        result[i] = prefix[i - 1] * running_inv;
+        result[i] = result[i - 1] * running_inv;
         // running_inv = running_inv * values[i]  (= 1 / prefix[i-1])
         running_inv = running_inv * values[i];
     }
@@ -150,6 +149,12 @@ EF interpolate_coset_with_precomputation(
     size_t n = evals.size();
     if (n == 0) {
         throw std::invalid_argument("interpolate_coset_with_precomputation: empty evals");
+    }
+    if (subgroup.size() != n) {
+        throw std::invalid_argument("interpolate_coset_with_precomputation: subgroup size mismatch");
+    }
+    if (diff_invs.size() != n) {
+        throw std::invalid_argument("interpolate_coset_with_precomputation: diff_invs size mismatch");
     }
 
     // Compute (z - g*h_i) for each coset point, then batch-invert.

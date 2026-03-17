@@ -347,14 +347,16 @@ template<typename F, size_t D, uint32_t W>
 inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::NEG_ONE =
     BinomialExtensionField<F,D,W>(F::zero_val() - F::one_val());
 
-// GENERATOR is field/degree-specific.
-// For non-BabyBear4 instantiations, referencing GENERATOR fails at compile time
-// with a clear diagnostic (instead of a linker-time undefined symbol).
+// GENERATOR is field/degree-specific; the primary template has no definition.
+// Any attempt to use GENERATOR for a non-specialized instantiation produces a
+// clear compile-time error via the dependent-false static_assert below, rather
+// than a silent wrong value or a hard-to-diagnose linker error.
+// The explicit specialization for BabyBear4 below is the sole valid definition.
 template<typename F, size_t D, uint32_t W>
 inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::GENERATOR = [] {
-    static_assert(std::is_same_v<F, BabyBear> && D == 4 && W == 11,
-                  "BinomialExtensionField::GENERATOR is only available for BabyBear4");
-    return BinomialExtensionField<F,D,W>::one_val();
+    static_assert(sizeof(F) == 0,
+                  "BinomialExtensionField::GENERATOR is only available for specialized types (e.g. BabyBear4)");
+    return BinomialExtensionField<F,D,W>{};
 }();
 #endif
 

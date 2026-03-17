@@ -19,10 +19,8 @@
 
 #include "hash.hpp"
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <vector>
 
 namespace p3_symmetric {
@@ -54,22 +52,32 @@ public:
      *
      * Corresponds to Rust's hash_iter / hash_slice.
      *
+     * Faithfully mirrors the Rust loop in sponge.rs: only the positions
+     * actually consumed from the input are overwritten in `state`;
+     * remaining positions keep their values from the previous permutation.
+     * An empty input returns the default (all-zero) state without permuting.
+     *
      * @param input  All field elements to hash (any length, including 0).
      * @return       Digest of OUT field elements.
      */
     Hash<F, OUT> hash_iter(const std::vector<F>& input) const {
         std::array<F, WIDTH> state{};
+        size_t input_pos = 0;
 
-        // Absorb input in RATE-sized chunks, always applying at least one permutation.
-        // An empty input absorbs a single all-zero block.
-        size_t pos = 0;
-        do {
-            size_t chunk_size = std::min(RATE, input.size() - pos);
-            std::copy_n(input.begin() + pos, chunk_size, state.begin());
-            std::fill(state.begin() + chunk_size, state.begin() + RATE, F());
-            permutation_.permute_mut(state);
-            pos += chunk_size;
-        } while (pos < input.size());
+        for (;;) {
+            size_t i = 0;
+            for (; i < RATE && input_pos < input.size(); ++i, ++input_pos) {
+                state[i] = input[input_pos];
+            }
+            if (i == RATE) {
+                permutation_.permute_mut(state);
+            } else {
+                if (i > 0) {
+                    permutation_.permute_mut(state);
+                }
+                break;
+            }
+        }
 
         Hash<F, OUT> digest;
         for (size_t i = 0; i < OUT; ++i) {
@@ -81,20 +89,13 @@ public:
     /**
      * @brief Hash a sequence of row slices (for Merkle tree leaf hashing).
      *
-     * Each row in `slices` is a slice of field elements. The elements are
-     * serialised to u32 via their canonical representation and fed through
-     * the sponge RATE elements at a time.
-     *
-     * For a 32-bit field like BabyBear each element maps to exactly one u32,
-     * and a u32 maps back to exactly one field element (value < p, so it is
-     * already reduced).
+     * Mirrors Rust's default CryptographicHasher::hash_iter_slices which
+     * simply flattens the slices and delegates to hash_iter.
      *
      * @param slices  Collection of rows; each row is a vector of F.
      * @return        Digest of OUT field elements.
      */
     Hash<F, OUT> hash_iter_slices(const std::vector<std::vector<F>>& slices) const {
-        // Flatten slices into a single stream of field elements, converting
-        // via the canonical u32 representation (RawDataSerializable semantics).
         std::vector<F> flat;
         size_t total_elems = 0;
         for (const auto& row : slices) {
@@ -102,11 +103,7 @@ public:
         }
         flat.reserve(total_elems);
         for (const auto& row : slices) {
-            for (const auto& elem : row) {
-                // as_canonical_u64() is the canonical representation;
-                // reconstruct as a field element so values stay < p.
-                flat.push_back(F(static_cast<uint32_t>(elem.as_canonical_u64())));
-            }
+            flat.insert(flat.end(), row.begin(), row.end());
         }
         return hash_iter(flat);
     }

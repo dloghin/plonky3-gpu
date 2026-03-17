@@ -20,7 +20,6 @@
 
 #include <array>
 #include <vector>
-#include <numeric>
 
 using namespace p3_symmetric;
 using namespace p3_field;
@@ -74,6 +73,45 @@ TEST(PaddingFreeSponge, EmptyInput) {
     for (size_t i = 0; i < OUT; ++i) {
         EXPECT_EQ(digest[i], BabyBear()) << "digest[" << i << "] should be zero";
     }
+}
+
+TEST(PaddingFreeSponge, EmptyInputNoPermutation) {
+    // Verify that empty input does NOT trigger a permutation (Rust semantics).
+    // With AddIndexPermutation an unwanted permutation would produce non-zero output.
+    constexpr size_t WIDTH = 4, RATE = 2, OUT = 2;
+    PaddingFreeSponge<AddIndexPermutation<WIDTH>, BabyBear, WIDTH, RATE, OUT> sponge{
+        AddIndexPermutation<WIDTH>{}
+    };
+
+    std::vector<BabyBear> input;
+    auto digest = sponge.hash_iter(input);
+
+    for (size_t i = 0; i < OUT; ++i) {
+        EXPECT_EQ(digest[i], BabyBear())
+            << "digest[" << i << "] should be zero (no permutation on empty input)";
+    }
+}
+
+TEST(PaddingFreeSponge, PartialLastChunk) {
+    // Input of 3 elements with RATE=2: one full chunk then one partial chunk.
+    // The partial chunk must NOT zero the remaining RATE positions in state
+    // (they retain their values from the previous permutation).
+    //
+    // Trace with AddIndexPermutation (state[i] += i+1):
+    //   state = [0,0,0,0]
+    //   Chunk 1 [1,2]: state = [1,2,0,0] -> permute -> [2,4,3,4]
+    //   Partial chunk [3]: state[0]=3, state[1] stays 4 -> [3,4,3,4] -> permute -> [4,6,6,8]
+    //   output = [4, 6]
+    constexpr size_t WIDTH = 4, RATE = 2, OUT = 2;
+    PaddingFreeSponge<AddIndexPermutation<WIDTH>, BabyBear, WIDTH, RATE, OUT> sponge{
+        AddIndexPermutation<WIDTH>{}
+    };
+
+    std::vector<BabyBear> input = {BabyBear(1u), BabyBear(2u), BabyBear(3u)};
+    auto digest = sponge.hash_iter(input);
+
+    EXPECT_EQ(digest[0], BabyBear(4u));
+    EXPECT_EQ(digest[1], BabyBear(6u));
 }
 
 TEST(PaddingFreeSponge, SingleChunkInput) {

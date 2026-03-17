@@ -31,7 +31,7 @@ namespace p3_dft {
  *              - powers() iterator (or hand-rolled power loop)
  */
 template<typename F>
-class Radix2Dit {
+class Radix2Dit : public TwoAdicSubgroupDft<F, Radix2Dit<F>> {
 public:
     // -----------------------------------------------------------------------
     // Twiddle-factor cache

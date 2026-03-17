@@ -14,10 +14,17 @@ if(ENABLE_WARNINGS)
     endif()
 endif()
 
-# Bring in dependencies (field, matrix, p3_util) -- they are siblings
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../util  util_build)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../field field_build)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../matrix matrix_build)
+# Bring in dependencies (field, matrix, p3_util) -- they are siblings.
+# Use guards to prevent duplicate target errors when subdirectories share deps.
+if(NOT TARGET p3_util)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../util  util_build)
+endif()
+if(NOT TARGET field)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../field field_build)
+endif()
+if(NOT TARGET matrix)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../matrix matrix_build)
+endif()
 
 # Header-only library
 add_library(p3_dft INTERFACE)

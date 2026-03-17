@@ -6,7 +6,7 @@
 #include "util.hpp"
 #include "p3_util/util.hpp"
 
-#include <map>
+#include <unordered_map>
 #include <vector>
 #include <cstddef>
 #include <stdexcept>
@@ -175,17 +175,11 @@ public:
         p3_matrix::RowMajorMatrix<F> mat, const F& shift)
     {
         size_t h = mat.height();
-        size_t w = mat.width();
 
-        // Multiply row i by shift^i
-        F shift_power = F::one_val();
-        for (size_t i = 0; i < h; ++i) {
-            if (i > 0) {
-                F* row = mat.row_mut(i);
-                for (size_t c = 0; c < w; ++c) {
-                    row[c] = row[c] * shift_power;
-                }
-            }
+        // Multiply row i by shift^i (row 0 is always multiplied by 1, skip it)
+        F shift_power = shift;
+        for (size_t i = 1; i < h; ++i) {
+            mat.scale_row(i, shift_power);
             shift_power = shift_power * shift;
         }
 
@@ -204,18 +198,12 @@ public:
         mat = idft_batch(std::move(mat));
 
         size_t h = mat.height();
-        size_t w = mat.width();
 
-        // Multiply row i by shift^{-i}
+        // Multiply row i by shift^{-i} (row 0 multiplied by 1, skip it)
         F inv_shift = shift.inv();
-        F inv_shift_power = F::one_val();
-        for (size_t i = 0; i < h; ++i) {
-            if (i > 0) {
-                F* row = mat.row_mut(i);
-                for (size_t c = 0; c < w; ++c) {
-                    row[c] = row[c] * inv_shift_power;
-                }
-            }
+        F inv_shift_power = inv_shift;
+        for (size_t i = 1; i < h; ++i) {
+            mat.scale_row(i, inv_shift_power);
             inv_shift_power = inv_shift_power * inv_shift;
         }
 
@@ -261,6 +249,71 @@ public:
     p3_matrix::RowMajorMatrix<EF> dft_algebra_batch(
         p3_matrix::RowMajorMatrix<EF> mat)
     {
+        return algebra_batch_impl(std::move(mat),
+            [this](p3_matrix::RowMajorMatrix<F> m) {
+                return dft_batch(std::move(m));
+            });
+    }
+
+    /**
+     * @brief IDFT of a matrix whose elements are extension field elements.
+     *
+     * Same decomposition strategy as dft_algebra_batch but uses idft_batch.
+     *
+     * @tparam EF  Extension field type.
+     */
+    template<typename EF>
+    p3_matrix::RowMajorMatrix<EF> idft_algebra_batch(
+        p3_matrix::RowMajorMatrix<EF> mat)
+    {
+        return algebra_batch_impl(std::move(mat),
+            [this](p3_matrix::RowMajorMatrix<F> m) {
+                return idft_batch(std::move(m));
+            });
+    }
+
+    /**
+     * @brief IDFT on a single column of extension field elements.
+     *
+     * Convenience wrapper that accepts/returns a std::vector<EF>.
+     */
+    template<typename EF>
+    std::vector<EF> idft_algebra(std::vector<EF> vec) {
+        if (vec.empty()) return {};
+        // Wrap as single-column matrix, moving the vector's data.
+        p3_matrix::RowMajorMatrix<EF> mat(std::move(vec), 1);
+        mat = idft_algebra_batch(std::move(mat));
+        // Extract column by moving the matrix's data.
+        return std::move(mat.values);
+    }
+
+private:
+    // Memoised twiddle factors: log_h -> [root^0, root^1, ..., root^(n/2-1)]
+    std::unordered_map<size_t, std::vector<F>> twiddles_;
+
+    /**
+     * @brief Compute 1 / 2^log_h in F by repeatedly halving.
+     */
+    static F compute_inv_n(size_t log_h) {
+        F two = F::one_val() + F::one_val();
+        F inv_two = two.inv();
+        F inv_n = F::one_val();
+        for (size_t i = 0; i < log_h; ++i) {
+            inv_n = inv_n * inv_two;
+        }
+        return inv_n;
+    }
+
+    /**
+     * @brief Common implementation for dft_algebra_batch and idft_algebra_batch.
+     *
+     * Decomposes EF elements into D base-field matrices, applies dft_fn to
+     * each, then reconstitutes the EF matrix.
+     */
+    template<typename EF, typename DftFn>
+    p3_matrix::RowMajorMatrix<EF> algebra_batch_impl(
+        p3_matrix::RowMajorMatrix<EF> mat, DftFn&& dft_fn)
+    {
         constexpr size_t D = EF::DEGREE;
         size_t h = mat.height();
         size_t w = mat.width();
@@ -278,9 +331,9 @@ public:
             }
         }
 
-        // DFT each base-field matrix
+        // Apply dft_fn to each base-field matrix
         for (size_t d = 0; d < D; ++d) {
-            base_mats[d] = dft_batch(std::move(base_mats[d]));
+            base_mats[d] = dft_fn(std::move(base_mats[d]));
         }
 
         // Reconstitute EF matrix
@@ -295,91 +348,6 @@ public:
             }
         }
         return result;
-    }
-
-    /**
-     * @brief IDFT of a matrix whose elements are extension field elements.
-     *
-     * Same decomposition strategy as dft_algebra_batch but uses idft_batch.
-     *
-     * @tparam EF  Extension field type.
-     */
-    template<typename EF>
-    p3_matrix::RowMajorMatrix<EF> idft_algebra_batch(
-        p3_matrix::RowMajorMatrix<EF> mat)
-    {
-        constexpr size_t D = EF::DEGREE;
-        size_t h = mat.height();
-        size_t w = mat.width();
-
-        std::vector<p3_matrix::RowMajorMatrix<F>> base_mats(D,
-            p3_matrix::RowMajorMatrix<F>(h, w));
-
-        for (size_t r = 0; r < h; ++r) {
-            for (size_t c = 0; c < w; ++c) {
-                const EF& elem = mat.get_unchecked(r, c);
-                for (size_t d = 0; d < D; ++d) {
-                    base_mats[d].set_unchecked(r, c, elem[d]);
-                }
-            }
-        }
-
-        for (size_t d = 0; d < D; ++d) {
-            base_mats[d] = idft_batch(std::move(base_mats[d]));
-        }
-
-        p3_matrix::RowMajorMatrix<EF> result(h, w);
-        for (size_t r = 0; r < h; ++r) {
-            for (size_t c = 0; c < w; ++c) {
-                EF elem;
-                for (size_t d = 0; d < D; ++d) {
-                    elem[d] = base_mats[d].get_unchecked(r, c);
-                }
-                result.set_unchecked(r, c, elem);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * @brief IDFT on a single column of extension field elements.
-     *
-     * Convenience wrapper that accepts/returns a std::vector<EF>.
-     */
-    template<typename EF>
-    std::vector<EF> idft_algebra(std::vector<EF> vec) {
-        size_t h = vec.size();
-        // Wrap as single-column matrix
-        p3_matrix::RowMajorMatrix<EF> mat(h, 1);
-        for (size_t i = 0; i < h; ++i) {
-            mat.set_unchecked(i, 0, vec[i]);
-        }
-
-        mat = idft_algebra_batch(std::move(mat));
-
-        // Extract column
-        std::vector<EF> result(h);
-        for (size_t i = 0; i < h; ++i) {
-            result[i] = mat.get_unchecked(i, 0);
-        }
-        return result;
-    }
-
-private:
-    // Memoised twiddle factors: log_h -> [root^0, root^1, ..., root^(n/2-1)]
-    std::map<size_t, std::vector<F>> twiddles_;
-
-    /**
-     * @brief Compute 1 / 2^log_h in F by repeatedly halving.
-     */
-    static F compute_inv_n(size_t log_h) {
-        F two = F::one_val() + F::one_val();
-        F inv_two = two.inv();
-        F inv_n = F::one_val();
-        for (size_t i = 0; i < log_h; ++i) {
-            inv_n = inv_n * inv_two;
-        }
-        return inv_n;
     }
 };
 

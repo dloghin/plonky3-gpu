@@ -28,7 +28,7 @@
  *         verify_batch(const Commitment& commit,
  *                      const std::vector<Dimensions>& dims,
  *                      size_t index,
- *                      const BatchOpening<F, Proof>& opening);
+ *                      BatchOpening<F, Proof> opening);
  *
  *     std::vector<const RowMajorMatrix<F>*>
  *         get_matrices(const ProverData& data) const;

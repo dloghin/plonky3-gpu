@@ -209,7 +209,7 @@ public:
         const Commitment&                commit,
         const std::vector<Dimensions>&   dims,
         size_t                           index,
-        const BatchOpening<EF, Proof>&   opening
+        BatchOpening<EF, Proof>          opening
     ) {
         size_t n_ef = dims.size();
 
@@ -245,7 +245,7 @@ public:
 
         BatchOpening<F, Proof> base_opening(
             std::move(base_values),
-            opening.opening_proof   // copy the proof
+            std::move(opening.opening_proof)
         );
 
         return inner_.verify_batch(commit, base_dims, index, base_opening);

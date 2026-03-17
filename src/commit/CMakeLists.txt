@@ -1,5 +1,15 @@
 cmake_minimum_required(VERSION 3.18)
-project(p3_commit VERSION 1.0.0 LANGUAGES CXX)
+
+# Centralized project version shared across modules.
+set(P3_GPU_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/project_version.cmake")
+if(EXISTS "${P3_GPU_VERSION_FILE}")
+    include("${P3_GPU_VERSION_FILE}")
+else()
+    # Fallback keeps standalone builds working even if the shared file is absent.
+    set(P3_GPU_PROJECT_VERSION "1.0.0")
+endif()
+
+project(p3_commit VERSION ${P3_GPU_PROJECT_VERSION} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,6 +33,7 @@ target_include_directories(commit INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../field/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../matrix/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../util/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../cuda/include>
     $<INSTALL_INTERFACE:include>
 )
 

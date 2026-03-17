@@ -26,7 +26,9 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Bring in p3_util (header-only, sibling directory)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../util util_build)
+if(NOT TARGET p3_util)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../util util_build)
+endif()
 
 # Header-only library
 add_library(matrix INTERFACE)

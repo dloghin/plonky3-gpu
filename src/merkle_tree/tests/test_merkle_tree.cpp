@@ -216,7 +216,6 @@ TEST(MerkleTree, MultiMatrixMixedHeightRootDiffersFromSingleMatrix) {
     auto tall1  = make_matrix(8, 2, 1);
     auto tall2  = make_matrix(8, 2, 1);
     auto short1 = make_matrix(4, 3, 100);
-    auto short2 = make_matrix(4, 3, 100);
 
     MockMmcs mmcs(MockHasher<DE>{}, MockCompressor<DE>{}, 0);
     auto [cap_single, t1] = mmcs.commit({std::move(tall1)});
@@ -361,7 +360,7 @@ TEST(MerkleTree, RoundTripMixedHeight) {
     MockMmcs mmcs(MockHasher<DE>{}, MockCompressor<DE>{}, 0);
     auto [cap, tree] = mmcs.commit({std::move(tall), std::move(short_)});
 
-    // Verify at all 8 indices (short matrix wraps: index % 4).
+    // Verify at all 8 indices (for the short matrix, row = index / 2).
     for (size_t i = 0; i < 8; ++i) {
         auto opening = mmcs.open_batch(i, tree);
         EXPECT_TRUE(mmcs.verify_batch(cap, dims, i, opening))

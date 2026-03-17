@@ -120,7 +120,6 @@ public:
      */
     Opening open_batch(size_t index, const ProverData& tree) const {
         const size_t max_height = tree.digest_layers[0].size();
-        const size_t cap_size   = tree.digest_layers.back().size();
         // Number of proof steps = number of layers below the cap.
         const size_t num_steps  = tree.digest_layers.size() - 1;
 
@@ -176,16 +175,13 @@ public:
         if (dims.size() != opening.opened_values.size()) return false;
         if (dims.empty()) return false;
 
-        // Determine max height from dims.
-        size_t max_height = 0;
-        for (const auto& d : dims) max_height = std::max(max_height, d.height);
-        if (max_height == 0) return false;
-
         // Sort matrix indices by height descending (mirrors build order).
         std::vector<size_t> order(dims.size());
         std::iota(order.begin(), order.end(), 0);
         std::stable_sort(order.begin(), order.end(),
             [&](size_t a, size_t b) { return dims[a].height > dims[b].height; });
+        const size_t max_height = dims[order[0]].height;
+        if (max_height == 0) return false;
 
         // Number of layers in the tree.
         const size_t cap_size  = commitment.cap.size();

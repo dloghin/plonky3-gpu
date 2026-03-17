@@ -58,22 +58,6 @@ struct MerkleTree {
 };
 
 // ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-namespace detail {
-
-/// Return log2 of a power-of-two value.  Asserts that n is a power of two.
-inline size_t log2_ceil(size_t n) {
-    assert(n > 0 && (n & (n - 1)) == 0 && "expected power-of-two");
-    size_t k = 0;
-    while ((size_t(1) << k) < n) ++k;
-    return k;
-}
-
-} // namespace detail
-
-// ---------------------------------------------------------------------------
 // build_merkle_tree
 // ---------------------------------------------------------------------------
 

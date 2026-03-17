@@ -48,6 +48,10 @@ bool verify_fri(
     // -------------------------------------------------------------------------
     // Replay commit phase (to reconstruct betas)
     // -------------------------------------------------------------------------
+    if (proof.commit_pow_witnesses.size() != proof.commit_phase_commits.size()) {
+        return false;
+    }
+
     std::vector<Challenge> betas;
     betas.reserve(proof.commit_phase_commits.size());
 
@@ -63,6 +67,25 @@ bool verify_fri(
 
         // Sample beta
         betas.push_back(challenger.sample_challenge());
+    }
+
+    // -------------------------------------------------------------------------
+    // Validate and observe the final polynomial
+    // -------------------------------------------------------------------------
+    if (proof.final_poly.size() != params.final_poly_len()) {
+        return false;
+    }
+
+    // Observe final polynomial coefficients (must match prover)
+    for (const auto& c : proof.final_poly) {
+        challenger.observe_challenge(c);
+    }
+
+    // Bind the folding arities into the transcript (must match prover)
+    if (!proof.query_proofs.empty()) {
+        for (const auto& step : proof.query_proofs[0].commit_phase_openings) {
+            challenger.observe_arity(static_cast<size_t>(step.log_arity));
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -150,29 +173,26 @@ bool verify_fri(
         }
 
         // -------------------------------------------------------------------------
-        // Check against final polynomial
+        // Check against final polynomial (Horner evaluation)
         // -------------------------------------------------------------------------
-        // Throughout FRI, evaluations are stored in bit-reversed order:
-        // position i holds the evaluation at domain point omega^(bit_rev(i, log_height)).
-        //
-        // The final polynomial is stored as proof.final_poly, which is obtained
-        // by calling reverse_slice_index_bits on the last `current` vector.
-        // So: final_poly[bit_rev(i, log_final)] = current[i]
-        // Equivalently: current[i] = final_poly[bit_rev(i, log_final)]
-        //
-        // After all folding rounds, `folded` equals current[cur_index] in the
-        // pre-reversal ordering.  The corresponding entry in final_poly is at
-        // index bit_rev(cur_index, cur_log_height).
-        if (cur_index >= proof.final_poly.size()) {
-            return false;
-        }
-        size_t fp_index = p3_util::reverse_bits_len(cur_index, cur_log_height);
-        if (fp_index >= proof.final_poly.size()) {
-            return false;
-        }
+        // The final polynomial is stored as coefficients [c_0, c_1, ..., c_{n-1}].
+        // We evaluate it at x = omega^(bit_rev(cur_index, log_max_height))
+        // where omega is the generator for the original domain.
+        {
+            size_t rev_idx = p3_util::reverse_bits_len(cur_index, log_max_height);
+            Val x_val = Val::two_adic_generator(log_max_height)
+                            .exp_u64(static_cast<uint64_t>(rev_idx));
 
-        if (folded != proof.final_poly[fp_index]) {
-            return false;
+            // Horner evaluation: eval = c_{n-1}*x^{n-1} + ... + c_1*x + c_0
+            Challenge eval = Challenge::zero_val();
+            for (size_t i = proof.final_poly.size(); i > 0; --i) {
+                eval = eval * embed_base<Val, Challenge>(x_val)
+                     + proof.final_poly[i - 1];
+            }
+
+            if (folded != eval) {
+                return false;
+            }
         }
     }
 

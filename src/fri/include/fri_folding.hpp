@@ -100,13 +100,26 @@ struct TwoAdicFriFolding {
         // w = primitive arity-th root of unity in the base field
         Val w_val = Val::two_adic_generator(log_arity);
 
-        // Build evaluation points t_i = x * w^i for i = 0..arity-1
+        // Build evaluation points t_i = x * w^i for i = 0..arity-1,
+        // then bit-reverse to match the bit-reversed data layout.
+        // In the committed matrix, column j holds the evaluation at
+        // x * w^(bit_reverse(j, log_arity)), so after bit-reversal
+        // t[j] correctly maps to evals[j].
         std::vector<Challenge> t(arity);
         {
             Val w_pow = Val::one_val();  // w^0 = 1
             for (size_t i = 0; i < arity; ++i) {
                 t[i] = x * embed_base<Val, Challenge>(w_pow);
                 w_pow = w_pow * w_val;
+            }
+        }
+        // Bit-reverse to match data ordering (critical for arity > 2)
+        {
+            for (size_t i = 0; i < arity; ++i) {
+                size_t j = p3_util::reverse_bits_len(i, log_arity);
+                if (i < j) {
+                    std::swap(t[i], t[j]);
+                }
             }
         }
 

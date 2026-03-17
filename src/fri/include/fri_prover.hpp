@@ -110,13 +110,16 @@ FriProof<Challenge, FriMmcs, Witness, InputProof> prove_fri(
         // Fold: reshape current into [height/arity][arity] and fold each row
         current = Folding::fold_matrix(log_height, log_arity, beta, current);
 
-        // Mix in the next input if its height now matches
+        // Mix in the next input if its height now matches.
+        // Multiply by beta^arity to maintain independence of the random
+        // linear combination (matches Rust: beta_pow = beta.exp_power_of_2(log_arity)).
         if (input_idx < inputs.size()) {
             size_t nlen = inputs[input_idx].size();
             if (nlen == current.size()) {
+                Challenge beta_pow = beta.exp_power_of_2(log_arity);
                 const auto& next_input = inputs[input_idx];
                 for (size_t k = 0; k < current.size(); ++k) {
-                    current[k] = current[k] + next_input[k];
+                    current[k] = current[k] + beta_pow * next_input[k];
                 }
                 ++input_idx;
             }
@@ -127,12 +130,52 @@ FriProof<Challenge, FriMmcs, Witness, InputProof> prove_fri(
     // Final polynomial
     // -------------------------------------------------------------------------
     // `current` now has length 2^log_final_height = blowup * final_poly_len.
-    // Bit-reverse to obtain the polynomial in "coefficient order".
+    // The polynomial has degree < final_poly_len, so we truncate, bit-reverse,
+    // and run an IDFT to recover the coefficients (matching Rust's approach).
+    size_t fpl = params.final_poly_len();
+    current.resize(fpl);
     p3_util::reverse_slice_index_bits(current);
-    // Truncate to final_poly_len (the polynomial has degree < final_poly_len,
-    // the remaining blowup-1 copies are redundant after bit-reversal).
-    // In plonky3, the full bit-reversed vector is used as "final_poly".
+
+    // Naive IDFT: c_k = (1/n) * sum_{j=0}^{n-1} e_j * omega^(-j*k)
+    // where omega is the n-th root of unity and e_j are the evaluations.
+    // This is O(n^2) but final_poly_len is tiny (typically 1–4).
+    {
+        size_t n = current.size();
+        Val omega = Val::two_adic_generator(p3_util::log2_strict_usize(n));
+        Val omega_inv = omega.exp_u64(static_cast<uint64_t>(n - 1));  // omega^(-1)
+
+        // Compute n_inv in the base field
+        Val n_val = Val::one_val();
+        for (size_t i = 1; i < n; ++i) n_val = n_val + Val::one_val();
+        Val n_inv = n_val.inv();
+        Challenge n_inv_c = embed_base<Val, Challenge>(n_inv);
+
+        std::vector<Challenge> coeffs(n, Challenge::zero_val());
+        Val omega_inv_k = Val::one_val();  // omega_inv^k
+        for (size_t k = 0; k < n; ++k) {
+            Challenge sum = Challenge::zero_val();
+            Val omega_inv_kj = Val::one_val();  // omega_inv^(k*j)
+            for (size_t j = 0; j < n; ++j) {
+                sum = sum + current[j] * embed_base<Val, Challenge>(omega_inv_kj);
+                omega_inv_kj = omega_inv_kj * omega_inv_k;
+            }
+            coeffs[k] = sum * n_inv_c;
+            omega_inv_k = omega_inv_k * omega_inv;
+        }
+        current = std::move(coeffs);
+    }
     std::vector<Challenge> final_poly = std::move(current);
+
+    // Observe final polynomial coefficients to the challenger
+    for (const auto& c : final_poly) {
+        challenger.observe_challenge(c);
+    }
+
+    // Bind the chosen folding arities into the transcript
+    for (size_t r = 0; r < commit_phase_data.size(); ++r) {
+        size_t la = params.mmcs.log_width(commit_phase_data[r]);
+        challenger.observe_arity(la);
+    }
 
     // -------------------------------------------------------------------------
     // Query phase

@@ -450,6 +450,18 @@ struct MockChallenger {
         // Mock: always accept. Does not modify state so prover/verifier stay in sync.
         return true;
     }
+
+    void observe_challenge(const BB4& c) {
+        // Observe a Challenge element to keep prover/verifier in sync.
+        for (size_t k = 0; k < 4; ++k) {
+            counter += c[k].as_canonical_u64();
+        }
+    }
+
+    void observe_arity(size_t la) {
+        // Observe a log_arity value to keep prover/verifier in sync.
+        counter += la;
+    }
 };
 
 // ---- Minimal prove+verify round-trip test ----
@@ -521,9 +533,9 @@ TEST(FriRoundTrip, SmallPolynomialConsistency) {
     EXPECT_EQ(proof.query_proofs.size(), params.num_queries);
     EXPECT_FALSE(proof.final_poly.empty());
 
-    // The final polynomial should have length = blowup * final_poly_len = 2*2 = 4
-    // (the full bit-reversed working vector)
-    EXPECT_EQ(proof.final_poly.size(), size_t(1) << params.log_final_height());
+    // The final polynomial should have length = final_poly_len = 2
+    // (coefficients after truncation and IDFT)
+    EXPECT_EQ(proof.final_poly.size(), params.final_poly_len());
 
     // Run verifier (reset challenger to same state)
     MockChallenger verifier_challenger;  // fresh challenger, same initial state

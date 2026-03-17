@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <type_traits>
+#include <algorithm>
 #include "p3_util/util.hpp"
 
 namespace p3_fri {
@@ -200,9 +201,7 @@ struct TwoAdicFriFolding {
 
         std::vector<Challenge> row_evals(arity);
         for (size_t i = 0; i < height; ++i) {
-            for (size_t j = 0; j < arity; ++j) {
-                row_evals[j] = current[i * arity + j];
-            }
+            std::copy_n(current.begin() + i * arity, arity, row_evals.begin());
             folded.push_back(fold_row(i, log_height, log_arity, beta, row_evals));
         }
         return folded;

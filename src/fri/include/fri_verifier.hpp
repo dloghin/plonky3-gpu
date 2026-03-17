@@ -23,7 +23,7 @@ namespace p3_fri {
 // input_mmcs: the input MMCS instance (used to verify input openings)
 // eval_at_query: callback that, given (query_index, log_max_height, opened_values),
 //                returns the Challenge evaluation that should equal the FRI evaluation.
-//                Signature: Challenge(size_t index, size_t log_height, InputProof&)
+//                Signature: Challenge(size_t index, size_t log_height, const InputProof&)
 //
 // Returns true if the proof verifies, false otherwise.
 template <
@@ -119,16 +119,17 @@ bool verify_fri(
             size_t row_index  = cur_index >> log_arity;
 
             // Reconstruct the full row from sibling_values + folded
+            if (step.sibling_values.size() != arity - 1) {
+                return false;
+            }
+
             std::vector<Challenge> row_evals(arity);
-            {
-                size_t sib = 0;
-                for (size_t j = 0; j < arity; ++j) {
-                    if (j == pos_in_row) {
-                        row_evals[j] = folded;
-                    } else {
-                        if (sib >= step.sibling_values.size()) return false;
-                        row_evals[j] = step.sibling_values[sib++];
-                    }
+            size_t sib = 0;
+            for (size_t j = 0; j < arity; ++j) {
+                if (j == pos_in_row) {
+                    row_evals[j] = folded;
+                } else {
+                    row_evals[j] = step.sibling_values[sib++];
                 }
             }
 

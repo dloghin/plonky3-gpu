@@ -10,6 +10,8 @@
 #if !P3_CUDA_ENABLED
 #include <iostream>
 #include <stdexcept>
+#include <type_traits>
+#include <vector>
 #endif
 
 namespace p3_field {
@@ -160,15 +162,121 @@ public:
         return result;
     }
 
+    // Raise to 2^n by squaring n times
+    P3_HOST_DEVICE BinomialExtensionField exp_power_of_2(size_t n) const {
+        BinomialExtensionField result = *this;
+        for (size_t i = 0; i < n; ++i) result = result.square();
+        return result;
+    }
+
+    // Divide all coefficients by 2 (multiply by the inverse of 2).
+    // On CPU, caches inv(2) as a static local; on GPU, recomputes each call.
+    P3_HOST_DEVICE BinomialExtensionField halve() const {
+#if !P3_CUDA_ENABLED
+        static const F two_inv = (F::one_val() + F::one_val()).inv();
+#else
+        const F two_inv = (F::one_val() + F::one_val()).inv();
+#endif
+        BinomialExtensionField result;
+        for (size_t i = 0; i < D; ++i) result.coeffs[i] = coeffs[i] * two_inv;
+        return result;
+    }
+
+    // Division: a / b = a * b^{-1}
+    P3_HOST_DEVICE BinomialExtensionField operator/(const BinomialExtensionField& other) const {
+        return *this * other.inv();
+    }
+
+    // Embed a base field element as [f, 0, 0, ...]
+    P3_HOST_DEVICE static BinomialExtensionField from_base(const F& f) {
+        return BinomialExtensionField(f);
+    }
+
+    // True iff all extension coefficients beyond index 0 are zero
+    P3_HOST_DEVICE bool is_in_basefield() const {
+        for (size_t i = 1; i < D; ++i) {
+            if (coeffs[i] != F::zero_val()) return false;
+        }
+        return true;
+    }
+
+    // D-th root of unity in F_p: z = W^((p-1)/D) mod p.
+    // This is the Frobenius image of the extension generator alpha: phi(alpha) = z * alpha.
+    P3_HOST_DEVICE static F dth_root() {
+#if !P3_CUDA_ENABLED
+        static const F cached = F(static_cast<uint32_t>(BINOMIAL_W))
+            .exp_u64((static_cast<uint64_t>(F::PRIME) - 1u) / static_cast<uint64_t>(D));
+        return cached;
+#else
+        return F(static_cast<uint32_t>(BINOMIAL_W))
+                   .exp_u64((static_cast<uint64_t>(F::PRIME) - 1u) / static_cast<uint64_t>(D));
+#endif
+    }
+
+    // Frobenius automorphism: phi(a) = a^p.
+    // In F[alpha]/(alpha^D - W):
+    //   phi([a0,...,a_{D-1}]) = [a0, a1*z, a2*z^2, ..., a_{D-1}*z^{D-1}]
+    // where z = dth_root = W^((p-1)/D).
+    P3_HOST_DEVICE BinomialExtensionField frobenius() const {
+        F z = dth_root();
+        BinomialExtensionField result;
+        F z_pow = F::one_val();
+        for (size_t i = 0; i < D; ++i) {
+            result.coeffs[i] = coeffs[i] * z_pow;
+            z_pow = z_pow * z;
+        }
+        return result;
+    }
+
+    // Apply Frobenius `count` times. Frobenius has order D, so count is taken mod D.
+    P3_HOST_DEVICE BinomialExtensionField repeated_frobenius(size_t count) const {
+        count %= D;
+        if (count == 0) {
+            return *this;
+        }
+    
+        F z_k = dth_root().exp_u64(count);
+    
+        BinomialExtensionField result;
+        F z_k_pow_i = F::one_val();
+        for (size_t i = 0; i < D; ++i) {
+            result.coeffs[i] = coeffs[i] * z_k_pow_i;
+            z_k_pow_i *= z_k;
+        }
+        return result;
+    }
+
     // Multiplicative inverse using Frobenius automorphism + norm.
     // Implemented only for BabyBear4 (D=4, W=11) via a full template specialization.
     // Calling this on any other instantiation will throw on CPU or trap on GPU.
     P3_HOST_DEVICE BinomialExtensionField inv() const;
 
     // Powers iterator: lazy infinite range yielding base^0, base^1, base^2, ...
+    // (See PowersRange below for the iterator type; no end(), use begin() + counter.)
+    // powers(n): returns the first n powers as a vector [1, a, a^2, ..., a^(n-1)].
 #if !P3_CUDA_ENABLED
     struct PowersRange;
     PowersRange powers() const;
+
+    std::vector<BinomialExtensionField> powers(size_t n) const {
+        std::vector<BinomialExtensionField> result;
+        result.reserve(n);
+        BinomialExtensionField cur = one_val();
+        for (size_t i = 0; i < n; ++i) {
+            result.push_back(cur);
+            cur = cur * (*this);
+        }
+        return result;
+    }
+#endif
+
+    // CPU-only static constants (use zero_val()/one_val() on GPU instead)
+#if !P3_CUDA_ENABLED
+    static const BinomialExtensionField ZERO;
+    static const BinomialExtensionField ONE;
+    static const BinomialExtensionField TWO;
+    static const BinomialExtensionField NEG_ONE;
+    static const BinomialExtensionField GENERATOR; // defined only for BabyBear4
 #endif
 
 #if !P3_CUDA_ENABLED
@@ -217,6 +325,39 @@ typename BinomialExtensionField<F, D, W>::PowersRange
 BinomialExtensionField<F, D, W>::powers() const {
     return PowersRange{*this};
 }
+#endif
+
+// ---------------------------------------------------------------------------
+// Static constant definitions (CPU only; template static members are implicitly
+// inline in C++17, so these definitions are safe in a header included by multiple TUs)
+// ---------------------------------------------------------------------------
+#if !P3_CUDA_ENABLED
+template<typename F, size_t D, uint32_t W>
+inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::ZERO{};
+
+template<typename F, size_t D, uint32_t W>
+inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::ONE =
+    BinomialExtensionField<F,D,W>(F::one_val());
+
+template<typename F, size_t D, uint32_t W>
+inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::TWO =
+    BinomialExtensionField<F,D,W>(F::one_val() + F::one_val());
+    
+template<typename F, size_t D, uint32_t W>
+inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::NEG_ONE =
+    BinomialExtensionField<F,D,W>(F::zero_val() - F::one_val());
+
+// GENERATOR is field/degree-specific; the primary template has no definition.
+// Any attempt to use GENERATOR for a non-specialized instantiation produces a
+// clear compile-time error via the dependent-false static_assert below, rather
+// than a silent wrong value or a hard-to-diagnose linker error.
+// The explicit specialization for BabyBear4 below is the sole valid definition.
+template<typename F, size_t D, uint32_t W>
+inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::GENERATOR = [] {
+    static_assert(sizeof(F) == 0,
+                  "BinomialExtensionField::GENERATOR is only available for specialized types (e.g. BabyBear4)");
+    return BinomialExtensionField<F,D,W>{};
+}();
 #endif
 
 // ---------------------------------------------------------------------------
@@ -272,7 +413,7 @@ P3_HOST_DEVICE inline BabyBear4 BabyBear4::inv() const {
     // Frobenius maps (phi^k applied component-wise):
     // phi^1(a)[i] = a[i] * z^i
     BabyBear4 pa({coeffs[0], coeffs[1] * z, coeffs[2] * z2, coeffs[3] * z3});
-    // phi^2(a)[i] = a[i] * z^(2i)  -- z^4=1 so z^4=1, z^6=z^2
+    // phi^2(a)[i] = a[i] * z^(2i)  -- z^4=1 so z^4=1, z^6=z^2  (z^4=1 => z^6=z^2)
     BabyBear4 p2a({coeffs[0], coeffs[1] * z2, coeffs[2], coeffs[3] * z2});
     // phi^3(a)[i] = a[i] * z^(3i)  -- z^6=z^2, z^9=z
     BabyBear4 p3a({coeffs[0], coeffs[1] * z3, coeffs[2] * z2, coeffs[3] * z});
@@ -303,6 +444,16 @@ P3_HOST_DEVICE inline BabyBear4 BabyBear4::inv() const {
     }
     return result;
 }
+
+// GENERATOR for BabyBear4: the multiplicative generator [6, 1, 0, 0]
+#if !P3_CUDA_ENABLED
+template<>
+inline const BabyBear4 BabyBear4::GENERATOR =
+    BabyBear4({BabyBear(6u),
+               BabyBear(1u),
+               BabyBear(),
+               BabyBear()});
+#endif
 
 // ---------------------------------------------------------------------------
 // TwoAdicExtField traits: two-adic constants for BabyBear4
@@ -353,3 +504,4 @@ struct TwoAdicExtField<BabyBear, 4, 11> {
 using BabyBear4TwoAdic = TwoAdicExtField<BabyBear, 4, 11>;
 
 } // namespace p3_field
+

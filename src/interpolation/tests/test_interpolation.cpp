@@ -356,7 +356,81 @@ TEST(Interpolation, PrecomputationReuse) {
 }
 
 // ---------------------------------------------------------------------------
-// 8. Degree-7 polynomial on 8-element coset  (larger subgroup)
+// 8. Cross-validation against Rust reference (plonky3/interpolation/src/lib.rs)
+// ---------------------------------------------------------------------------
+// The Rust test_interpolate_subgroup uses polynomial f(x) = x^2 + 2x + 3
+// evaluated on the 8-element subgroup (shift=1), then interpolates at z=100.
+// Expected: f(100) = 10000 + 200 + 3 = 10203.
+//
+// The hardcoded evaluation values below are the canonical BabyBear
+// representations of f(w^i) for i=0..7, where w = two_adic_generator(3).
+
+TEST(Interpolation, RustCrossValidation_Subgroup) {
+    BB w = BB::two_adic_generator(3);
+    const size_t n = 8;
+    std::vector<BB> H(n);
+    H[0] = bb(1u);
+    for (size_t i = 1; i < n; ++i) H[i] = H[i-1] * w;
+
+    BB shift(1u);
+    auto diff_invs = compute_diff_invs(H, shift);
+
+    uint32_t rust_evals[8] = {
+        6, 886605102, 1443543107, 708307799,
+        2, 556938009,  569722818, 1874680944,
+    };
+
+    // Verify evals match f(h_i) = h_i^2 + 2*h_i + 3
+    for (size_t i = 0; i < n; ++i) {
+        BB h = H[i];
+        BB expected_eval = h * h + BB(2u) * h + BB(3u);
+        ASSERT_EQ(expected_eval.value(), rust_evals[i])
+            << "eval mismatch at i=" << i
+            << " (C++ subgroup element may differ from Rust)";
+    }
+
+    std::vector<EF> evals;
+    for (auto v : rust_evals) evals.push_back(ef(v));
+
+    EF z = ef(100u);
+    EF result = interpolate_coset_with_precomputation(evals, shift, z, H, diff_invs);
+    expect_ef_eq(result, 10203u, 0u, 0u, 0u);
+}
+
+// Rust test_interpolate_coset: same polynomial, shift = F::GENERATOR = 31.
+TEST(Interpolation, RustCrossValidation_Coset) {
+    BB w = BB::two_adic_generator(3);
+    const size_t n = 8;
+    std::vector<BB> H(n);
+    H[0] = bb(1u);
+    for (size_t i = 1; i < n; ++i) H[i] = H[i-1] * w;
+
+    BB shift(31u);  // BabyBear multiplicative generator
+    auto diff_invs = compute_diff_invs(H, shift);
+
+    uint32_t rust_evals[8] = {
+        1026, 129027310, 457985035, 994890337,
+         902, 1988942953, 1555278970, 913671254,
+    };
+
+    // Verify evals match f(shift*h_i) = (shift*h_i)^2 + 2*(shift*h_i) + 3
+    for (size_t i = 0; i < n; ++i) {
+        BB x = shift * H[i];
+        BB expected_eval = x * x + BB(2u) * x + BB(3u);
+        ASSERT_EQ(expected_eval.value(), rust_evals[i])
+            << "eval mismatch at i=" << i;
+    }
+
+    std::vector<EF> evals;
+    for (auto v : rust_evals) evals.push_back(ef(v));
+
+    EF z = ef(100u);
+    EF result = interpolate_coset_with_precomputation(evals, shift, z, H, diff_invs);
+    expect_ef_eq(result, 10203u, 0u, 0u, 0u);
+}
+
+// ---------------------------------------------------------------------------
+// 10. Degree-7 polynomial on 8-element coset  (larger subgroup)
 // ---------------------------------------------------------------------------
 
 TEST(Interpolation, Degree7PolynomialBaseFieldPoint) {
@@ -383,7 +457,7 @@ TEST(Interpolation, Degree7PolynomialBaseFieldPoint) {
 }
 
 // ---------------------------------------------------------------------------
-// 9. f(x) = x evaluated on large subgroup (sanity: should recover z)
+// 11. f(x) = x evaluated on large subgroup (sanity: should recover z)
 // ---------------------------------------------------------------------------
 
 TEST(Interpolation, LinearOnLargeSubgroup) {

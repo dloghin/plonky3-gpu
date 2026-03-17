@@ -145,8 +145,7 @@ FriProof<Challenge, FriMmcs, Witness, InputProof> prove_fri(
         Val omega_inv = omega.exp_u64(static_cast<uint64_t>(n - 1));  // omega^(-1)
 
         // Compute n_inv in the base field
-        Val n_val = Val::one_val();
-        for (size_t i = 1; i < n; ++i) n_val = n_val + Val::one_val();
+        Val n_val(static_cast<uint32_t>(n));
         Val n_inv = n_val.inv();
         Challenge n_inv_c = embed_base<Val, Challenge>(n_inv);
 

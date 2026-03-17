@@ -375,7 +375,7 @@ TEST(Interpolation, RustCrossValidation_Subgroup) {
     BB shift(1u);
     auto diff_invs = compute_diff_invs(H, shift);
 
-    uint32_t rust_evals[8] = {
+    const std::array<uint32_t, 8> rust_evals = {
         6, 886605102, 1443543107, 708307799,
         2, 556938009,  569722818, 1874680944,
     };

@@ -10,6 +10,7 @@
 #if !P3_CUDA_ENABLED
 #include <iostream>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 #endif
 
@@ -346,8 +347,15 @@ template<typename F, size_t D, uint32_t W>
 inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::NEG_ONE =
     BinomialExtensionField<F,D,W>(F::zero_val() - F::one_val());
 
-// GENERATOR is field/degree-specific; only defined for BabyBear4 below.
-// Accessing GENERATOR on any other instantiation produces a linker error.
+// GENERATOR is field/degree-specific.
+// For non-BabyBear4 instantiations, referencing GENERATOR fails at compile time
+// with a clear diagnostic (instead of a linker-time undefined symbol).
+template<typename F, size_t D, uint32_t W>
+inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::GENERATOR = [] {
+    static_assert(std::is_same_v<F, BabyBear> && D == 4 && W == 11,
+                  "BinomialExtensionField::GENERATOR is only available for BabyBear4");
+    return BinomialExtensionField<F,D,W>::one_val();
+}();
 #endif
 
 // ---------------------------------------------------------------------------

@@ -78,8 +78,7 @@ TEST(Radix2Dit, DftBatchSingleRow) {
 TEST(Radix2Dit, RoundTripSize4) {
     Radix2Dit<BabyBear> dft;
     auto original = make_col({1, 2, 3, 4});
-    auto mat = original;
-    auto transformed = dft.dft_batch(mat);
+    auto transformed = dft.dft_batch(original);
     auto recovered = dft.idft_batch(transformed);
     EXPECT_TRUE(matrices_equal(recovered, original))
         << "Round-trip (size 4, 1 col) failed";

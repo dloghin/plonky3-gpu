@@ -22,6 +22,9 @@
  *      - z=5 (base field) → 125
  *      - z=[5,1,0,0] (extension field) → [125,75,15,1]
  *   7. Precomputation can be reused for multiple query points.
+ *   8. Cross-validation against Rust reference (plonky3/interpolation/src/lib.rs).
+ *   9. Degree-7 polynomial f(x) = x^7 on 8-element coset.
+ *  10. f(x) = x on large subgroup (sanity: should recover z).
  */
 
 #include <gtest/gtest.h>
@@ -430,7 +433,7 @@ TEST(Interpolation, RustCrossValidation_Coset) {
 }
 
 // ---------------------------------------------------------------------------
-// 10. Degree-7 polynomial on 8-element coset  (larger subgroup)
+// 9. Degree-7 polynomial on 8-element coset  (larger subgroup)
 // ---------------------------------------------------------------------------
 
 TEST(Interpolation, Degree7PolynomialBaseFieldPoint) {
@@ -457,7 +460,7 @@ TEST(Interpolation, Degree7PolynomialBaseFieldPoint) {
 }
 
 // ---------------------------------------------------------------------------
-// 11. f(x) = x evaluated on large subgroup (sanity: should recover z)
+// 10. f(x) = x evaluated on large subgroup (sanity: should recover z)
 // ---------------------------------------------------------------------------
 
 TEST(Interpolation, LinearOnLargeSubgroup) {

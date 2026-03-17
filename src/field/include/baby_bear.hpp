@@ -32,6 +32,9 @@ public:
     // p - 1 = 2^27 * 15, so the 2-adicity is 27
     static constexpr size_t TWO_ADICITY = 27;
 
+    // Number of usable random bits per field element (floor(log2(p)) = 30)
+    static constexpr size_t FIELD_BITS = 31;
+
     // Multiplicative group generator (primitive root of F_p*)
     // 31 is a primitive root modulo p
     static constexpr uint32_t GENERATOR_VAL = 31;

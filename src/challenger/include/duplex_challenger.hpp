@@ -46,6 +46,19 @@ class DuplexChallenger {
     std::vector<F> input_buffer_;        // pending observations (max RATE)
     std::vector<F> output_buffer_;       // available samples
 
+    void absorb_without_invalidation(F value) {
+        input_buffer_.push_back(value);
+        if (input_buffer_.size() == RATE) {
+            duplexing();
+        }
+    }
+
+    void observe_witness(uint64_t witness) {
+        output_buffer_.clear();
+        absorb_without_invalidation(F(static_cast<uint32_t>(witness & 0xFFFFFFFFu)));
+        absorb_without_invalidation(F(static_cast<uint32_t>(witness >> 32)));
+    }
+
     void duplexing() {
         // 1. Copy input_buffer into sponge_state[0..len]
         for (size_t i = 0; i < input_buffer_.size(); ++i) {
@@ -77,19 +90,20 @@ public:
     void observe(F value) {
         // Observing clears the output_buffer (invalidates pending samples)
         output_buffer_.clear();
-
-        input_buffer_.push_back(value);
-        if (input_buffer_.size() == RATE) {
-            duplexing();
-        }
+        absorb_without_invalidation(value);
     }
 
     /**
      * @brief Observe a slice of field elements.
      */
     void observe_slice(const std::vector<F>& values) {
+        if (values.empty()) {
+            return;
+        }
+        // Bulk absorb: clear once, then absorb each value.
+        output_buffer_.clear();
         for (const F& v : values) {
-            observe(v);
+            absorb_without_invalidation(v);
         }
     }
 
@@ -150,8 +164,9 @@ public:
      */
     template <typename EF>
     void observe_algebra_element(const EF& value) {
+        output_buffer_.clear();
         for (size_t i = 0; i < EF::DEGREE; ++i) {
-            observe(value.coeffs[i]);
+            absorb_without_invalidation(value.coeffs[i]);
         }
     }
 
@@ -160,8 +175,14 @@ public:
      */
     template <typename EF>
     void observe_algebra_slice(const std::vector<EF>& values) {
+        if (values.empty()) {
+            return;
+        }
+        output_buffer_.clear();
         for (const EF& v : values) {
-            observe_algebra_element<EF>(v);
+            for (size_t i = 0; i < EF::DEGREE; ++i) {
+                absorb_without_invalidation(v.coeffs[i]);
+            }
         }
     }
 
@@ -178,9 +199,13 @@ public:
      */
     template <typename Hash>
     void observe_merkle_cap(const std::vector<Hash>& cap) {
+        if (cap.empty()) {
+            return;
+        }
+        output_buffer_.clear();
         for (const Hash& h : cap) {
             for (const F& elem : h) {
-                observe(elem);
+                absorb_without_invalidation(elem);
             }
         }
     }
@@ -190,9 +215,9 @@ public:
     // ------------------------------------------------------------------
 
     /**
-     * @brief Brute-force search for a witness such that the hash of
-     *        (state || witness) has `bits` leading zero bits (i.e. the
-     *        sampled element's low `bits` bits are all zero).
+     * @brief Brute-force search for a witness such that hashing
+     *        (state || witness) yields a sampled element whose canonical
+     *        representation has `bits` trailing zero bits.
      *
      * Algorithm:
      *   1. Clone current state.
@@ -206,15 +231,13 @@ public:
         DuplexChallenger saved = *this;
         for (uint64_t witness = 0; ; ++witness) {
             DuplexChallenger attempt = saved;
-            attempt.observe(F(static_cast<uint32_t>(witness & 0xFFFFFFFFu)));
-            attempt.observe(F(static_cast<uint32_t>(witness >> 32)));
+            attempt.observe_witness(witness);
             F elem = attempt.sample();
             uint64_t val = elem.as_canonical_u64();
             uint64_t mask = (bits == 64) ? ~uint64_t(0) : ((uint64_t(1) << bits) - 1u);
             if ((val & mask) == 0u) {
                 // Accept: record witness in real challenger
-                observe(F(static_cast<uint32_t>(witness & 0xFFFFFFFFu)));
-                observe(F(static_cast<uint32_t>(witness >> 32)));
+                observe_witness(witness);
                 return witness;
             }
         }
@@ -227,8 +250,7 @@ public:
      * the element's low `bits` bits are all zero.
      */
     bool check_witness(size_t bits, uint64_t witness) {
-        observe(F(static_cast<uint32_t>(witness & 0xFFFFFFFFu)));
-        observe(F(static_cast<uint32_t>(witness >> 32)));
+        observe_witness(witness);
         F elem = sample();
         uint64_t val = elem.as_canonical_u64();
         uint64_t mask = (bits == 64) ? ~uint64_t(0) : ((uint64_t(1) << bits) - 1u);

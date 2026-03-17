@@ -155,7 +155,7 @@ public:
         BinomialExtensionField base = *this;
         while (power > 0) {
             if (power & 1) result = result * base;
-            base = base.square();
+            if (power > 1) base = base.square();
             power >>= 1;
         }
         return result;
@@ -230,8 +230,18 @@ public:
     // Apply Frobenius `count` times. Frobenius has order D, so count is taken mod D.
     P3_HOST_DEVICE BinomialExtensionField repeated_frobenius(size_t count) const {
         count %= D;
-        BinomialExtensionField result = *this;
-        for (size_t i = 0; i < count; ++i) result = result.frobenius();
+        if (count == 0) {
+            return *this;
+        }
+    
+        F z_k = dth_root().exp_u64(count);
+    
+        BinomialExtensionField result;
+        F z_k_pow_i = F::one_val();
+        for (size_t i = 0; i < D; ++i) {
+            result.coeffs[i] = coeffs[i] * z_k_pow_i;
+            z_k_pow_i *= z_k;
+        }
         return result;
     }
 
@@ -329,18 +339,12 @@ inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::ONE =
     BinomialExtensionField<F,D,W>(F::one_val());
 
 template<typename F, size_t D, uint32_t W>
-inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::TWO = []{
-    BinomialExtensionField<F,D,W> r;
-    r.coeffs[0] = F::one_val() + F::one_val();
-    return r;
-}();
-
+inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::TWO =
+    BinomialExtensionField<F,D,W>(F::one_val() + F::one_val());
+    
 template<typename F, size_t D, uint32_t W>
-inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::NEG_ONE = []{
-    BinomialExtensionField<F,D,W> r;
-    r.coeffs[0] = F::zero_val() - F::one_val();
-    return r;
-}();
+inline const BinomialExtensionField<F,D,W> BinomialExtensionField<F,D,W>::NEG_ONE =
+    BinomialExtensionField<F,D,W>(F::zero_val() - F::one_val());
 
 // GENERATOR is field/degree-specific; only defined for BabyBear4 below.
 // Accessing GENERATOR on any other instantiation produces a linker error.
@@ -435,8 +439,8 @@ P3_HOST_DEVICE inline BabyBear4 BabyBear4::inv() const {
 #if !P3_CUDA_ENABLED
 template<>
 inline const BabyBear4 BabyBear4::GENERATOR =
-    BabyBear4({BabyBear(static_cast<uint32_t>(6u)),
-               BabyBear(static_cast<uint32_t>(1u)),
+    BabyBear4({BabyBear(6u),
+               BabyBear(1u),
                BabyBear(),
                BabyBear()});
 #endif

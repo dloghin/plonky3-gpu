@@ -375,9 +375,12 @@ TEST(BabyBearExt4Exponentiation, ExpPowerOf2) {
 TEST(BabyBearExt4Exponentiation, InverseViaExp) {
     // a * a^(-1) = 1; also a^(order-1) = a^(-1)
     Ext4 a = make(1, 2, 3, 4);
-    Ext4 inv_a = a.inv();
-    // Verify via division
-    EXPECT_EQ(Ext4::ONE / a, inv_a);
+    Ext4 inv_a_1 = a.inv();
+    Ext4 a1 = make(1, 2, 3, 4);
+    Ext4 inv_a_2 = a1.exp_u64(P - 2);
+    std::cout << "inv_a_1: " << inv_a_1 << std::endl;
+    std::cout << "inv_a_2: " << inv_a_2 << std::endl;
+    EXPECT_EQ(inv_a_1, inv_a_2);
 }
 
 // ---------------------------------------------------------------------------

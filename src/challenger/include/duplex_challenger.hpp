@@ -114,7 +114,10 @@ public:
      * Returns and removes the last element of output_buffer.
      */
     F sample() {
-        if (output_buffer_.empty()) {
+        // If we have buffered inputs, we must perform a duplexing so that the
+        // challenge will reflect them. Or if we've run out of outputs, we must
+        // perform a duplexing to get more.
+        if (!input_buffer_.empty() || output_buffer_.empty()) {
             duplexing();
         }
         F val = output_buffer_.back();

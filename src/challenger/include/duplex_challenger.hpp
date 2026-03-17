@@ -21,6 +21,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <algorithm>
+#include <cassert>
 
 namespace p3_challenger {
 
@@ -61,9 +63,7 @@ class DuplexChallenger {
 
     void duplexing() {
         // 1. Copy input_buffer into sponge_state[0..len]
-        for (size_t i = 0; i < input_buffer_.size(); ++i) {
-            sponge_state_[i] = input_buffer_[i];
-        }
+        std::copy(input_buffer_.begin(), input_buffer_.end(), sponge_state_.begin());
         // 2. Clear input_buffer
         input_buffer_.clear();
         // 3. Apply permutation
@@ -132,6 +132,7 @@ public:
      * F must provide: uint64_t as_canonical_u64() const  and  static constexpr size_t FIELD_BITS.
      */
     size_t sample_bits(size_t bits) {
+        assert(bits <= sizeof(size_t) * 8);
         size_t result = 0;
         size_t bits_remaining = bits;
         while (bits_remaining > 0) {

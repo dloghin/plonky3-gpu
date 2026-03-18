@@ -412,7 +412,7 @@ public:
                     if (qpd.flat_data.empty()) {
                         qpd.lde_height = lde_height;
                         qpd.total_cols = 0;
-                        qpd.flat_data.resize(lde_height * 0);
+                        qpd.flat_data.resize(0);
                     }
 
                     // Append this matrix's columns to the prover data

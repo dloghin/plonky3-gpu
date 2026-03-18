@@ -57,8 +57,11 @@ class DuplexChallenger {
 
     void observe_witness(uint64_t witness) {
         output_buffer_.clear();
-        absorb_without_invalidation(F(static_cast<uint32_t>(witness & 0xFFFFFFFFu)));
-        absorb_without_invalidation(F(static_cast<uint32_t>(witness >> 32)));
+        // Match Rust: observe(F::from_canonical_u64(witness)) — a single field element.
+        // For 31-bit fields like BabyBear, the witness always fits since grind()
+        // finds solutions quickly (typically < 2^bits iterations).
+        assert(witness <= UINT32_MAX && "witness must fit in a single field element");
+        absorb_without_invalidation(F(static_cast<uint32_t>(witness)));
     }
 
     void duplexing() {
@@ -232,6 +235,7 @@ public:
      *        - If low `bits` bits are zero → observe witness in real state, return.
      */
     uint64_t grind(size_t bits) {
+        assert(bits < F::FIELD_BITS && "PoW bits must be less than FIELD_BITS");
         DuplexChallenger saved = *this;
         for (uint64_t witness = 0; ; ++witness) {
             DuplexChallenger attempt = saved;

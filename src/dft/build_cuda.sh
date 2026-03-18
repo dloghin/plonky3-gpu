@@ -14,7 +14,9 @@ fi
 
 # Try to find CUDA
 CUDA_PATH=""
-if [ -d "/usr/local/cuda" ]; then
+if [ -n "${CUDA_HOME}" ] && [ -d "${CUDA_HOME}" ]; then
+    CUDA_PATH="${CUDA_HOME}"
+elif [ -d "/usr/local/cuda" ]; then
     CUDA_PATH="/usr/local/cuda"
 elif [ -d "/usr/local/cuda-12.9" ]; then
     CUDA_PATH="/usr/local/cuda-12.9"

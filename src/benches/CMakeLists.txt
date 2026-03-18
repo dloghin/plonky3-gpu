@@ -32,21 +32,41 @@ target_link_libraries(transpose_benchmark PRIVATE plonky3 benchmark::benchmark)
 add_executable(columnwise_dot_product columnwise_dot_product.cpp)
 target_link_libraries(columnwise_dot_product PRIVATE plonky3 benchmark::benchmark)
 
+add_executable(bench_fold_even_odd bench_fold_even_odd.cpp)
+target_link_libraries(bench_fold_even_odd PRIVATE plonky3 benchmark::benchmark)
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(bench_field PRIVATE -O3 -march=native)
     target_compile_options(transpose_benchmark PRIVATE -O3 -march=native)
     target_compile_options(columnwise_dot_product PRIVATE -O3 -march=native)
+    target_compile_options(bench_fold_even_odd PRIVATE -O3 -march=native)
 elseif(MSVC)
     target_compile_options(bench_field PRIVATE /O2)
     target_compile_options(transpose_benchmark PRIVATE /O2)
     target_compile_options(columnwise_dot_product PRIVATE /O2)
+    target_compile_options(bench_fold_even_odd PRIVATE /O2)
+endif()
+
+if(ENABLE_CUDA)
+    add_executable(bench_fold_even_odd_cuda bench_fold_even_odd_cuda.cu)
+    target_link_libraries(bench_fold_even_odd_cuda PRIVATE plonky3 benchmark::benchmark)
+    if(TARGET matrix_cuda)
+        target_link_libraries(bench_fold_even_odd_cuda PRIVATE matrix_cuda)
+    endif()
+    target_compile_options(bench_fold_even_odd_cuda
+        PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+    )
+    set_target_properties(bench_fold_even_odd_cuda PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+    )
 endif()
 
 add_custom_target(run_benchmarks
     COMMAND bench_field
     COMMAND transpose_benchmark
     COMMAND columnwise_dot_product
-    DEPENDS bench_field transpose_benchmark columnwise_dot_product
+    COMMAND bench_fold_even_odd
+    DEPENDS bench_field transpose_benchmark columnwise_dot_product bench_fold_even_odd
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Running benchmarks..."
 )

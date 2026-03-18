@@ -202,6 +202,14 @@ public:
 
             for (size_t j = 0; j < od.points.size(); ++j) {
                 Challenge z = od.points[j];
+
+                // Precompute (z - x_br[i])^{-1} for all i using batch inversion.
+                std::vector<Challenge> z_minus_x_diffs(n_lde);
+                for (size_t i = 0; i < n_lde; ++i) {
+                    z_minus_x_diffs[i] = z - embed_base<Val, Challenge>(x_br[i]);
+                }
+                auto z_minus_x_inv = p3_interpolation::batch_multiplicative_inverse(z_minus_x_diffs);
+
                 for (size_t col = 0; col < nw; ++col) {
                     Challenge fz = opened_values[b][j][col];
                     Challenge ak = alpha.exp_u64(static_cast<uint64_t>(alpha_idx++));
@@ -210,8 +218,7 @@ public:
                         // row i of bit-reversed matrix = f(x_{br(i)})
                         Val fx_val = mmcs_.get_value(od.prover_data, od.mat_idx, i, col);
                         Challenge fx = embed_base<Val, Challenge>(fx_val);
-                        Challenge x  = embed_base<Val, Challenge>(x_br[i]);
-                        q[i] = q[i] + ak * (fz - fx) * (z - x).inv();
+                        q[i] = q[i] + ak * (fz - fx) * z_minus_x_inv[i];
                     }
                 }
             }
@@ -245,7 +252,7 @@ public:
     // -----------------------------------------------------------------------
     template <typename Challenger>
     bool verify(
-        std::vector<CommitmentsWithPoints> data,
+        const std::vector<CommitmentsWithPoints>& data,
         const Proof& proof,
         Challenger& challenger)
     {

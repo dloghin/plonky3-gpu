@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build script for p3_dft with CUDA NTT support
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build_cuda"
@@ -14,8 +14,17 @@ fi
 
 # Try to find CUDA
 CUDA_PATH=""
-if [ -n "${CUDA_HOME}" ] && [ -d "${CUDA_HOME}" ]; then
+
+# Respect common environment variables first
+if [ -n "${CUDA_HOME:-}" ] && [ -d "${CUDA_HOME}" ]; then
     CUDA_PATH="${CUDA_HOME}"
+elif [ -n "${CUDA_PATH:-}" ] && [ -d "${CUDA_PATH}" ]; then
+    # Some environments use CUDA_PATH
+    CUDA_PATH="${CUDA_PATH}"
+elif command -v nvcc >/dev/null 2>&1; then
+    # Derive CUDA root from nvcc on PATH
+    NVCC_BIN="$(command -v nvcc)"
+    CUDA_PATH="$(cd "$(dirname "${NVCC_BIN}")/.." && pwd)"
 elif [ -d "/usr/local/cuda" ]; then
     CUDA_PATH="/usr/local/cuda"
 elif [ -d "/usr/local/cuda-12.9" ]; then

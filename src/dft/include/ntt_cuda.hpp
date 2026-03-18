@@ -203,9 +203,10 @@ __global__ void reverse_rows_kernel(F* data, size_t height, size_t width) {
 template<typename F>
 __global__ void coset_twist_kernel(
     F*     data,
+    const F* row_powers,
     size_t height,
     size_t width,
-    F      base_shift)
+    F      /*base_shift*/)
 {
     size_t total = (height - 1) * width;
     size_t idx   = blockIdx.x * blockDim.x + threadIdx.x;
@@ -214,8 +215,20 @@ __global__ void coset_twist_kernel(
     size_t col = idx % width;
     size_t row = idx / width + 1;    // rows 1 .. height-1
 
-    F factor                    = base_shift.exp_u64(static_cast<uint64_t>(row));
-    data[row * width + col]     = data[row * width + col] * factor;
+    // row_powers stores base_shift^row at index row (row 1..height-1).
+    data[row * width + col] = data[row * width + col] * row_powers[row];
+}
+
+/**
+ * @brief Precompute row powers for coset twisting: row_powers[row] = base_shift^row.
+ *
+ * Computes entries for row in [1, height). row_powers[0] is unused (set to 1 by caller if needed).
+ */
+template<typename F>
+__global__ void compute_row_powers_kernel(F* row_powers, size_t height, F base_shift) {
+    size_t row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row == 0 || row >= height) return;
+    row_powers[row] = base_shift.exp_u64(static_cast<uint64_t>(row));
 }
 
 /**
@@ -261,7 +274,7 @@ public:
 #if P3_CUDA_ENABLED
         if (prefer_gpu) {
             int device_count = 0;
-            cudaGetDeviceCount(&device_count);
+            P3_CUDA_CHECK(cudaGetDeviceCount(&device_count));
             use_gpu_ = (device_count > 0);
         }
 #else
@@ -272,7 +285,8 @@ public:
     ~NttCuda() {
 #if P3_CUDA_ENABLED
         for (auto& kv : d_twiddles_) {
-            cudaFree(kv.second);
+            // Destructors must not throw; best-effort free.
+            (void)cudaFree(kv.second);
         }
 #endif
     }
@@ -385,12 +399,13 @@ private:
         size_t half = n >> 1;
 
         F* d_tw;
-        cudaMalloc(&d_tw, half * sizeof(F));
+        P3_CUDA_CHECK(cudaMalloc(&d_tw, half * sizeof(F)));
 
         F root = TwoAdicFieldTraits<F>::two_adic_generator(log_h);
 
         size_t nblocks = (half + BLOCK_SIZE - 1) / BLOCK_SIZE;
         compute_twiddles_kernel<<<nblocks, BLOCK_SIZE>>>(d_tw, half, root);
+        P3_CUDA_CHECK(cudaGetLastError());
 
         d_twiddles_[log_h] = d_tw;
         return d_tw;
@@ -414,6 +429,7 @@ private:
         {
             size_t nblocks = (total + BLOCK_SIZE - 1) / BLOCK_SIZE;
             bit_reverse_kernel<<<nblocks, BLOCK_SIZE>>>(d_data, height, log_h, width);
+            P3_CUDA_CHECK(cudaGetLastError());
         }
 
         // Butterfly layers
@@ -424,6 +440,7 @@ private:
             size_t nblocks       = (layer_total + BLOCK_SIZE - 1) / BLOCK_SIZE;
             for (size_t l = 0; l < log_h; ++l) {
                 ntt_dit_kernel<<<nblocks, BLOCK_SIZE>>>(d_data, d_tw, height, width, l);
+                P3_CUDA_CHECK(cudaGetLastError());
             }
         }
     }
@@ -443,6 +460,7 @@ private:
             size_t rev_total = n_pairs * width;
             size_t nblocks   = (rev_total + BLOCK_SIZE - 1) / BLOCK_SIZE;
             reverse_rows_kernel<<<nblocks, BLOCK_SIZE>>>(d_data, height, width);
+            P3_CUDA_CHECK(cudaGetLastError());
         }
 
         // Scale by 1/n
@@ -450,6 +468,7 @@ private:
         {
             size_t nblocks = (total + BLOCK_SIZE - 1) / BLOCK_SIZE;
             scale_kernel<<<nblocks, BLOCK_SIZE>>>(d_data, total, inv_n);
+            P3_CUDA_CHECK(cudaGetLastError());
         }
     }
 
@@ -460,9 +479,30 @@ private:
      */
     void do_coset_twist(F* d_data, size_t height, size_t width, const F& base_shift) {
         if (height <= 1) return;
-        size_t twist_total = (height - 1) * width;
-        size_t nblocks     = (twist_total + BLOCK_SIZE - 1) / BLOCK_SIZE;
-        coset_twist_kernel<<<nblocks, BLOCK_SIZE>>>(d_data, height, width, base_shift);
+        // Precompute base_shift^row once per row, then apply across all columns.
+        F* d_row_powers = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&d_row_powers, height * sizeof(F)));
+
+        // row 0 is unused; set it to 1 for safety.
+        {
+            F one = F::one_val();
+            P3_CUDA_CHECK(cudaMemcpy(d_row_powers, &one, sizeof(F), cudaMemcpyHostToDevice));
+        }
+
+        {
+            size_t nblocks = (height + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            compute_row_powers_kernel<<<nblocks, BLOCK_SIZE>>>(d_row_powers, height, base_shift);
+            P3_CUDA_CHECK(cudaGetLastError());
+        }
+
+        {
+            size_t twist_total = (height - 1) * width;
+            size_t nblocks     = (twist_total + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            coset_twist_kernel<<<nblocks, BLOCK_SIZE>>>(d_data, d_row_powers, height, width, base_shift);
+            P3_CUDA_CHECK(cudaGetLastError());
+        }
+
+        P3_CUDA_CHECK(cudaFree(d_row_powers));
     }
 
     // ------------------------------------------------------------------
@@ -475,13 +515,14 @@ private:
         size_t total = h * w;
 
         F* d_data;
-        cudaMalloc(&d_data, total * sizeof(F));
-        cudaMemcpy(d_data, mat.values.data(), total * sizeof(F), cudaMemcpyHostToDevice);
+        P3_CUDA_CHECK(cudaMalloc(&d_data, total * sizeof(F)));
+        P3_CUDA_CHECK(cudaMemcpy(d_data, mat.values.data(), total * sizeof(F), cudaMemcpyHostToDevice));
 
         do_forward_ntt(d_data, h, w);
 
-        cudaMemcpy(mat.values.data(), d_data, total * sizeof(F), cudaMemcpyDeviceToHost);
-        cudaFree(d_data);
+        P3_CUDA_CHECK(cudaDeviceSynchronize());
+        P3_CUDA_CHECK(cudaMemcpy(mat.values.data(), d_data, total * sizeof(F), cudaMemcpyDeviceToHost));
+        P3_CUDA_CHECK(cudaFree(d_data));
         return mat;
     }
 
@@ -492,14 +533,15 @@ private:
         size_t total = h * w;
 
         F* d_data;
-        cudaMalloc(&d_data, total * sizeof(F));
-        cudaMemcpy(d_data, mat.values.data(), total * sizeof(F), cudaMemcpyHostToDevice);
+        P3_CUDA_CHECK(cudaMalloc(&d_data, total * sizeof(F)));
+        P3_CUDA_CHECK(cudaMemcpy(d_data, mat.values.data(), total * sizeof(F), cudaMemcpyHostToDevice));
 
         do_forward_ntt(d_data, h, w);
         do_reverse_scale(d_data, h, w, log_h);
 
-        cudaMemcpy(mat.values.data(), d_data, total * sizeof(F), cudaMemcpyDeviceToHost);
-        cudaFree(d_data);
+        P3_CUDA_CHECK(cudaDeviceSynchronize());
+        P3_CUDA_CHECK(cudaMemcpy(mat.values.data(), d_data, total * sizeof(F), cudaMemcpyDeviceToHost));
+        P3_CUDA_CHECK(cudaFree(d_data));
         return mat;
     }
 
@@ -511,14 +553,15 @@ private:
         size_t total = h * w;
 
         F* d_data;
-        cudaMalloc(&d_data, total * sizeof(F));
-        cudaMemcpy(d_data, mat.values.data(), total * sizeof(F), cudaMemcpyHostToDevice);
+        P3_CUDA_CHECK(cudaMalloc(&d_data, total * sizeof(F)));
+        P3_CUDA_CHECK(cudaMemcpy(d_data, mat.values.data(), total * sizeof(F), cudaMemcpyHostToDevice));
 
         do_coset_twist(d_data, h, w, shift);
         do_forward_ntt(d_data, h, w);
 
-        cudaMemcpy(mat.values.data(), d_data, total * sizeof(F), cudaMemcpyDeviceToHost);
-        cudaFree(d_data);
+        P3_CUDA_CHECK(cudaDeviceSynchronize());
+        P3_CUDA_CHECK(cudaMemcpy(mat.values.data(), d_data, total * sizeof(F), cudaMemcpyDeviceToHost));
+        P3_CUDA_CHECK(cudaFree(d_data));
         return mat;
     }
 
@@ -533,8 +576,8 @@ private:
         F inv_shift = shift.inv();    // Compute on host before GPU operations
 
         F* d_data;
-        cudaMalloc(&d_data, total * sizeof(F));
-        cudaMemcpy(d_data, mat.values.data(), total * sizeof(F), cudaMemcpyHostToDevice);
+        P3_CUDA_CHECK(cudaMalloc(&d_data, total * sizeof(F)));
+        P3_CUDA_CHECK(cudaMemcpy(d_data, mat.values.data(), total * sizeof(F), cudaMemcpyHostToDevice));
 
         // IDFT = forward DFT + row reversal + scaling
         do_forward_ntt(d_data, h, w);
@@ -542,8 +585,9 @@ private:
         // Inverse coset twist: multiply row i by inv_shift^i
         do_coset_twist(d_data, h, w, inv_shift);
 
-        cudaMemcpy(mat.values.data(), d_data, total * sizeof(F), cudaMemcpyDeviceToHost);
-        cudaFree(d_data);
+        P3_CUDA_CHECK(cudaDeviceSynchronize());
+        P3_CUDA_CHECK(cudaMemcpy(mat.values.data(), d_data, total * sizeof(F), cudaMemcpyDeviceToHost));
+        P3_CUDA_CHECK(cudaFree(d_data));
         return mat;
     }
 
@@ -565,11 +609,11 @@ private:
 
         // Allocate device buffer large enough for the extended matrix
         F* d_data;
-        cudaMalloc(&d_data, total_new * sizeof(F));
+        P3_CUDA_CHECK(cudaMalloc(&d_data, total_new * sizeof(F)));
 
         // Copy original evaluations to device (first orig_h rows)
-        cudaMemcpy(d_data, mat.values.data(), orig_h * w * sizeof(F),
-                   cudaMemcpyHostToDevice);
+        P3_CUDA_CHECK(cudaMemcpy(d_data, mat.values.data(), orig_h * w * sizeof(F),
+                                 cudaMemcpyHostToDevice));
 
         // Step 1: INTT of size orig_h
         do_forward_ntt(d_data, orig_h, w);
@@ -580,6 +624,7 @@ private:
             size_t pad_total = (new_h - orig_h) * w;
             size_t nblocks   = (pad_total + BLOCK_SIZE - 1) / BLOCK_SIZE;
             zero_pad_kernel<<<nblocks, BLOCK_SIZE>>>(d_data, orig_h, new_h, w);
+            P3_CUDA_CHECK(cudaGetLastError());
         }
 
         // Step 3: Coset DFT of size new_h
@@ -592,9 +637,10 @@ private:
         mat.values.resize(total_new);
         // (width_ is private; use the public constructor trick via std::vector swap)
         p3_matrix::RowMajorMatrix<F> result(std::move(mat.values), w);
-        cudaMemcpy(result.values.data(), d_data, total_new * sizeof(F),
-                   cudaMemcpyDeviceToHost);
-        cudaFree(d_data);
+        P3_CUDA_CHECK(cudaDeviceSynchronize());
+        P3_CUDA_CHECK(cudaMemcpy(result.values.data(), d_data, total_new * sizeof(F),
+                                 cudaMemcpyDeviceToHost));
+        P3_CUDA_CHECK(cudaFree(d_data));
         return result;
     }
 

@@ -170,31 +170,31 @@ TEST(TwoAdicMultiplicativeCoset, ElementsFormCyclicGroup) {
 }
 
 TEST(TwoAdicMultiplicativeCoset, NaturalDomainForDegree) {
-    // degree 0 -> log_n = 0, size 1
+    // degree 0 -> needs 1 point, log_n = 0, size 1
     {
         auto d = TwoAdicMultiplicativeCoset<BB>::natural_domain_for_degree(0);
         EXPECT_EQ(d.size(), 1u);
         EXPECT_EQ(d.shift, BB::one_val());
     }
-    // degree 1 -> log_n = 0, size 1  (ceil(log2(1)) = 0)
+    // degree 1 -> needs 2 points, log_n = 1, size 2  (ceil(log2(2)) = 1)
     {
         auto d = TwoAdicMultiplicativeCoset<BB>::natural_domain_for_degree(1);
-        EXPECT_EQ(d.size(), 1u);
-    }
-    // degree 2 -> log_n = 1, size 2
-    {
-        auto d = TwoAdicMultiplicativeCoset<BB>::natural_domain_for_degree(2);
         EXPECT_EQ(d.size(), 2u);
     }
-    // degree 5 -> log_n = 3 (ceil(log2(5)) = 3), size 8
+    // degree 2 -> needs 3 points, log_n = 2, size 4  (ceil(log2(3)) = 2)
+    {
+        auto d = TwoAdicMultiplicativeCoset<BB>::natural_domain_for_degree(2);
+        EXPECT_EQ(d.size(), 4u);
+    }
+    // degree 5 -> needs 6 points, log_n = 3 (ceil(log2(6)) = 3), size 8
     {
         auto d = TwoAdicMultiplicativeCoset<BB>::natural_domain_for_degree(5);
         EXPECT_EQ(d.size(), 8u);
     }
-    // degree 8 -> log_n = 3 (ceil(log2(8)) = 3), size 8
+    // degree 8 -> needs 9 points, log_n = 4 (ceil(log2(9)) = 4), size 16
     {
         auto d = TwoAdicMultiplicativeCoset<BB>::natural_domain_for_degree(8);
-        EXPECT_EQ(d.size(), 8u);
+        EXPECT_EQ(d.size(), 16u);
     }
 }
 

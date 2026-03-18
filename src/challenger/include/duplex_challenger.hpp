@@ -57,11 +57,8 @@ class DuplexChallenger {
 
     void observe_witness(uint64_t witness) {
         output_buffer_.clear();
-        // Match Rust: observe(F::from_canonical_u64(witness)) — a single field element.
-        // For 31-bit fields like BabyBear, the witness always fits since grind()
-        // finds solutions quickly (typically < 2^bits iterations).
-        assert(witness <= UINT32_MAX && "witness must fit in a single field element");
-        absorb_without_invalidation(F(static_cast<uint32_t>(witness)));
+        absorb_without_invalidation(F(static_cast<uint32_t>(witness & 0xFFFFFFFFu)));
+        absorb_without_invalidation(F(static_cast<uint32_t>(witness >> 32)));
     }
 
     void duplexing() {

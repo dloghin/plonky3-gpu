@@ -19,6 +19,7 @@
 #include <array>
 #include <tuple>
 #include <map>
+#include <utility>
 #include <functional>
 #include <stdexcept>
 #include <algorithm>
@@ -279,6 +280,12 @@ public:
         // Compute opened values via barycentric interpolation
         OpenedValues all_opened_values;
 
+        struct InterpPrecomp {
+            std::vector<Val> subgroup;   // length = lde_height
+            std::vector<Val> diff_invs;  // precomputation for coset interpolation
+        };
+        std::map<std::pair<size_t, uint64_t>, InterpPrecomp> interp_cache;
+
         for (auto& [pcs_data, mat_points] : open_data) {
             std::vector<std::vector<std::vector<Challenge>>> batch_opened;
             for (size_t mi = 0; mi < pcs_data->lde_matrices.size(); ++mi) {
@@ -290,16 +297,25 @@ public:
                 size_t lde_log_h  = p3_util::log2_strict_usize(lde_height);
                 size_t num_cols   = lde.width();
 
-                Val omega_lde = Val::two_adic_generator(lde_log_h);
-                std::vector<Val> subgroup(lde_height);
-                {
-                    Val cur = Val::one_val();
-                    for (size_t i = 0; i < lde_height; ++i) {
-                        subgroup[i] = cur;
-                        cur = cur * omega_lde;
+                const uint64_t shift_key = domain.shift.as_canonical_u64();
+                auto key = std::make_pair(lde_log_h, shift_key);
+                auto it = interp_cache.find(key);
+                if (it == interp_cache.end()) {
+                    Val omega_lde = Val::two_adic_generator(lde_log_h);
+                    std::vector<Val> subgroup(lde_height);
+                    {
+                        Val cur = Val::one_val();
+                        for (size_t i = 0; i < lde_height; ++i) {
+                            subgroup[i] = cur;
+                            cur = cur * omega_lde;
+                        }
                     }
+                    auto diff_invs = p3_interpolation::compute_diff_invs(subgroup, domain.shift);
+                    it = interp_cache.emplace(
+                        key, InterpPrecomp{std::move(subgroup), std::move(diff_invs)}).first;
                 }
-                auto diff_invs = p3_interpolation::compute_diff_invs(subgroup, domain.shift);
+                const auto& subgroup  = it->second.subgroup;
+                const auto& diff_invs = it->second.diff_invs;
 
                 std::vector<std::vector<Challenge>> mat_opened;
                 for (const Challenge& z : points) {

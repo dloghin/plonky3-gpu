@@ -108,7 +108,10 @@ P3_HOST_DEVICE P3_INLINE uint128_t mul64(uint64_t a, uint64_t b) {
     return uint128_t(hi, lo);
 #else
     // Use compiler's 128-bit type on host
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
     __uint128_t prod = static_cast<__uint128_t>(a) * static_cast<__uint128_t>(b);
+#pragma GCC diagnostic pop
     return uint128_t(static_cast<uint64_t>(prod >> 64), static_cast<uint64_t>(prod));
 #endif
 }

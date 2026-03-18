@@ -80,8 +80,7 @@ public:
         constants(std::move(constants)),
         mds(mds_matrix)
     {
-        size_t num_rounds = 2 * half_num_full_rounds + num_partial_rounds;
-        assert(this->constants.size() == WIDTH * num_rounds &&
+        assert(this->constants.size() == WIDTH * (2 * half_num_full_rounds + num_partial_rounds) &&
                "Constants vector must have WIDTH * num_rounds elements");
     }
 

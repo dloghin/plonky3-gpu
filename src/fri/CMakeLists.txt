@@ -67,6 +67,11 @@ if(BUILD_CUDA_EXAMPLES)
         target_include_directories(fri_fold_cuda_example
             PRIVATE ${FRI_FOLD_CUDA_INCLUDE_DIRS}
         )
+        # BabyBear4 uses std::array-backed coeff storage; NVCC needs relaxed constexpr
+        # to allow device code to call some constexpr stdlib accessors.
+        target_compile_options(fri_fold_cuda_example
+            PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+        )
         set_target_properties(fri_fold_cuda_example
             PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin

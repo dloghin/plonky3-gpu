@@ -341,11 +341,7 @@ TEST(TwoAdicFriPcs, OpenVerifyRoundTrip) {
     // Prepare open data: open at one extension-field point
     BB4 z({ BB(5u), BB(3u), BB(1u), BB(0u) });
 
-    MyPcs::OpenData od;
-    od.prover_data = pd;
-    od.mat_idx     = 0;
-    od.domain      = domain;
-    od.points      = { z };
+    MyPcs::OpenData od{ pd, 0, domain, { z } };
 
     PcsChallenger prover_challenger;
     auto [opened_vals, proof] = pcs.open({ od }, prover_challenger);
@@ -398,11 +394,7 @@ TEST(TwoAdicFriPcs, VerifyRejectsTamperedOpenedValues) {
 
     BB4 z({ BB(7u), BB(2u), BB(0u), BB(1u) });
 
-    MyPcs::OpenData od;
-    od.prover_data = pd;
-    od.mat_idx     = 0;
-    od.domain      = domain;
-    od.points      = { z };
+    MyPcs::OpenData od{ pd, 0, domain, { z } };
 
     PcsChallenger prover_challenger;
     auto [opened_vals, proof] = pcs.open({ od }, prover_challenger);
@@ -458,11 +450,7 @@ TEST(TwoAdicFriPcs, MultiColumnRoundTrip) {
 
     BB4 z({ BB(3u), BB(1u), BB(0u), BB(0u) });
 
-    MyPcs::OpenData od;
-    od.prover_data = pd;
-    od.mat_idx     = 0;
-    od.domain      = domain;
-    od.points      = { z };
+    MyPcs::OpenData od{ pd, 0, domain, { z } };
 
     PcsChallenger prover_challenger;
     auto [opened_vals, proof] = pcs.open({ od }, prover_challenger);
@@ -512,11 +500,7 @@ TEST(TwoAdicFriPcs, TwoOpeningPointsRoundTrip) {
     BB4 z1({ BB(2u), BB(1u), BB(0u), BB(0u) });
     BB4 z2({ BB(9u), BB(0u), BB(1u), BB(0u) });
 
-    MyPcs::OpenData od;
-    od.prover_data = pd;
-    od.mat_idx     = 0;
-    od.domain      = domain;
-    od.points      = { z1, z2 };
+    MyPcs::OpenData od{ pd, 0, domain, { z1, z2 } };
 
     PcsChallenger prover_challenger;
     auto [opened_vals, proof] = pcs.open({ od }, prover_challenger);

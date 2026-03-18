@@ -192,12 +192,17 @@ public:
             size_t nw = mmcs_.matrix_width(od.prover_data, od.mat_idx);
             Val omega = Val::two_adic_generator(log_lde);
 
-            // Precompute x values in bit-reversed order:
+            // Precompute omega powers and x values in bit-reversed order:
             //   x_br[i] = shift * omega^{bit_rev(i, log_lde)}
+            std::vector<Val> omega_powers(n_lde);
+            omega_powers[0] = Val::one_val();
+            for (size_t i = 1; i < n_lde; ++i) {
+                omega_powers[i] = omega_powers[i - 1] * omega;
+            }
             std::vector<Val> x_br(n_lde);
             for (size_t i = 0; i < n_lde; ++i) {
                 size_t k = p3_util::reverse_bits_len(i, log_lde);
-                x_br[i] = od.domain.shift * omega.exp_u64(static_cast<uint64_t>(k));
+                x_br[i] = od.domain.shift * omega_powers[k];
             }
 
             for (size_t j = 0; j < od.points.size(); ++j) {
@@ -213,7 +218,6 @@ public:
                 for (size_t col = 0; col < nw; ++col) {
                     Challenge fz = opened_values[b][j][col];
                     Challenge ak = alpha.exp_u64(static_cast<uint64_t>(alpha_idx++));
-
                     for (size_t i = 0; i < n_lde; ++i) {
                         // row i of bit-reversed matrix = f(x_{br(i)})
                         Val fx_val = mmcs_.get_value(od.prover_data, od.mat_idx, i, col);

@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build_cuda"
 
-if [ "$1" == "clean" ]; then
+if [ "${1:-}" == "clean" ]; then
     echo "Cleaning build directory..."
     rm -rf "${BUILD_DIR}"
     exit 0

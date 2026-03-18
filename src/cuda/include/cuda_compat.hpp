@@ -41,11 +41,16 @@
     #define P3_CONSTEXPR_HD constexpr
 #endif
 
-// Assertions for GPU code
+// Assertions for mixed host/device builds
+#include <cassert>
 #if P3_CUDA_ENABLED
-    #define P3_ASSERT(cond) do { if (!(cond)) { asm("trap;"); } } while(0)
+    // __CUDA_ARCH__ is defined only when compiling device code.
+    #if defined(__CUDA_ARCH__)
+        #define P3_ASSERT(cond) do { if (!(cond)) { asm("trap;"); } } while(0)
+    #else
+        #define P3_ASSERT(cond) assert(cond)
+    #endif
 #else
-    #include <cassert>
     #define P3_ASSERT(cond) assert(cond)
 #endif
 

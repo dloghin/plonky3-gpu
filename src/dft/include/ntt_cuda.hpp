@@ -205,8 +205,7 @@ __global__ void coset_twist_kernel(
     F*     data,
     const F* row_powers,
     size_t height,
-    size_t width,
-    F      /*base_shift*/)
+    size_t width)
 {
     size_t total = (height - 1) * width;
     size_t idx   = blockIdx.x * blockDim.x + threadIdx.x;
@@ -274,8 +273,15 @@ public:
 #if P3_CUDA_ENABLED
         if (prefer_gpu) {
             int device_count = 0;
-            P3_CUDA_CHECK(cudaGetDeviceCount(&device_count));
-            use_gpu_ = (device_count > 0);
+            cudaError_t err = cudaGetDeviceCount(&device_count);
+            if (err == cudaSuccess) {
+                use_gpu_ = (device_count > 0);
+            } else if (err == cudaErrorNoDevice || err == cudaErrorInsufficientDriver) {
+                // Graceful runtime fallback: keep GPU path disabled.
+                use_gpu_ = false;
+            } else {
+                P3_CUDA_CHECK(err);
+            }
         }
 #else
         (void)prefer_gpu;
@@ -498,7 +504,7 @@ private:
         {
             size_t twist_total = (height - 1) * width;
             size_t nblocks     = (twist_total + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            coset_twist_kernel<<<nblocks, BLOCK_SIZE>>>(d_data, d_row_powers, height, width, base_shift);
+            coset_twist_kernel<<<nblocks, BLOCK_SIZE>>>(d_data, d_row_powers, height, width);
             P3_CUDA_CHECK(cudaGetLastError());
         }
 

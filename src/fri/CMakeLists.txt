@@ -24,6 +24,8 @@ target_include_directories(fri INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../matrix/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../util/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../cuda/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../interpolation/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../dft/include>
     $<INSTALL_INTERFACE:include>
 )
 

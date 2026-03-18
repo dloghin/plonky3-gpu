@@ -20,11 +20,7 @@
 #include "p3_util/util.hpp"
 
 #include <vector>
-#include <array>
 #include <cstdint>
-#include <algorithm>
-#include <unordered_map>
-#include <numeric>
 
 using namespace p3_fri;
 using namespace p3_field;
@@ -103,23 +99,20 @@ struct FriMockMmcs {
         return r;
     }
 
-    void open_row(const ProverData&, size_t row_index, OpeningProof& proof) const {
+    void open_row(const ProverData& /*pd*/, size_t row_index, OpeningProof& proof) const {
         proof.row_index = row_index;
     }
 
-    bool verify_row(const Commitment&, size_t, const std::vector<BB4>&,
-                    const OpeningProof&) const { return true; }
+    bool verify_row(const Commitment& /*commit*/, size_t /*row*/,
+                    const std::vector<BB4>& /*row_vals*/,
+                    const OpeningProof& /*proof*/) const { return true; }
 
-    void open(size_t, const std::vector<ProverData>&, OpeningProof& proof) const {
-        proof.row_index = 0;
-    }
+    bool verify_query(size_t /*query_index*/, size_t /*log_max_height*/,
+                      const std::vector<Commitment>& /*commits*/,
+                      const OpeningProof& /*proof*/,
+                      const BB4& /*folded*/) const { return true; }
 
-    bool verify_query(size_t, size_t,
-                      const std::vector<Commitment>&,
-                      const OpeningProof&,
-                      const BB4&) const { return true; }
-
-    void observe_commitment(const Commitment&) const {}
+    void observe_commitment(const Commitment& /*commit*/) const {}
 };
 
 // The PCS input MMCS.  Handles multiple Val-typed matrices.
@@ -167,12 +160,20 @@ struct PcsInputMmcs {
     {
         proof.row_values.clear();
         proof.row_indices.clear();
+
+        size_t log_max_height = 0;
         for (const auto& pd : pds) {
-            // There should be exactly one matrix per pd in our test usage.
-            // Use the single matrix (mat_idx=0).
+            size_t h = pd.matrices.at(0).height();
+            size_t lh = p3_util::log2_strict_usize(h);
+            if (lh > log_max_height) log_max_height = lh;
+        }
+
+        for (const auto& pd : pds) {
             const auto& mat = pd.matrices.at(0);
             size_t h = mat.height();
-            size_t row = query_index % h;  // wrap query index into this matrix's height
+            size_t log_h = p3_util::log2_strict_usize(h);
+            size_t height_diff = log_max_height - log_h;
+            size_t row = query_index >> height_diff;
             size_t w   = mat.width();
             std::vector<BB> row_vals(w);
             for (size_t c = 0; c < w; ++c)
@@ -183,12 +184,12 @@ struct PcsInputMmcs {
     }
 
     // Called by verify_fri: verify the Merkle opening.  Mock: always accept.
-    bool verify_query(size_t, size_t,
-                      const std::vector<Commitment>&,
-                      const OpeningProof&,
-                      const BB4&) const { return true; }
+    bool verify_query(size_t /*query_index*/, size_t /*log_max_height*/,
+                      const std::vector<Commitment>& /*commits*/,
+                      const OpeningProof& /*proof*/,
+                      const BB4& /*folded*/) const { return true; }
 
-    void observe_commitment(const Commitment&) const {}
+    void observe_commitment(const Commitment& /*commit*/) const {}
 };
 
 // ============================================================================
@@ -225,7 +226,10 @@ struct PcsChallenger {
     bool check_witness(size_t, uint64_t) { return true; }
 
     void observe_challenge(const BB4& c) {
-        for (size_t k = 0; k < 4; ++k) counter += c[k].as_canonical_u64();
+        for (size_t k = 0; k < 4; ++k) {
+            counter += c[k].as_canonical_u64();
+            counter = counter * 6364136223846793005ULL + 1442695040888963407ULL;
+        }
     }
 
     void observe_arity(size_t la) { counter += la; }
@@ -354,7 +358,6 @@ TEST(TwoAdicFriPcs, OpenVerifyRoundTrip) {
     // Verify
     MyPcs::CommitmentsWithPoints cwp;
     cwp.commitment    = commit;
-    cwp.mat_idx       = 0;
     cwp.domain        = domain;
     cwp.points        = { z };
     cwp.opened_values = opened_vals[0];  // [point][col]
@@ -410,7 +413,6 @@ TEST(TwoAdicFriPcs, VerifyRejectsTamperedOpenedValues) {
 
     MyPcs::CommitmentsWithPoints cwp;
     cwp.commitment    = commit;
-    cwp.mat_idx       = 0;
     cwp.domain        = domain;
     cwp.points        = { z };
     cwp.opened_values = tampered_vals;
@@ -469,7 +471,6 @@ TEST(TwoAdicFriPcs, MultiColumnRoundTrip) {
 
     MyPcs::CommitmentsWithPoints cwp;
     cwp.commitment    = commit;
-    cwp.mat_idx       = 0;
     cwp.domain        = domain;
     cwp.points        = { z };
     cwp.opened_values = opened_vals[0];
@@ -524,7 +525,6 @@ TEST(TwoAdicFriPcs, TwoOpeningPointsRoundTrip) {
 
     MyPcs::CommitmentsWithPoints cwp;
     cwp.commitment    = commit;
-    cwp.mat_idx       = 0;
     cwp.domain        = domain;
     cwp.points        = { z1, z2 };
     cwp.opened_values = opened_vals[0];

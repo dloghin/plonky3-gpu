@@ -14,6 +14,7 @@
 #include <utility>
 #include <map>
 #include <functional>
+#include <cstddef>
 #include <stdexcept>
 
 namespace p3_fri {
@@ -77,7 +78,6 @@ public:
     // CommitmentsWithPoints: used in verify().
     struct CommitmentsWithPoints {
         Commitment                              commitment;
-        size_t                                  mat_idx;
         Coset                                   domain;
         std::vector<Challenge>                  points;
         std::vector<std::vector<Challenge>>     opened_values; // [point][col]

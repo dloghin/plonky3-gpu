@@ -101,7 +101,7 @@ struct TwoAdicMultiplicativeCoset {
     // For degree == 0 we return a size-1 domain (log_n = 0).
     // -----------------------------------------------------------------------
     static TwoAdicMultiplicativeCoset natural_domain_for_degree(size_t degree) {
-        size_t log_n = (degree == 0) ? 0 : p3_util::log2_ceil_usize(degree);
+        size_t log_n = p3_util::log2_ceil_usize(degree + 1);
         return TwoAdicMultiplicativeCoset(log_n, F::one_val());
     }
 

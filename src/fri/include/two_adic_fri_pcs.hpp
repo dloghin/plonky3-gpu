@@ -416,7 +416,10 @@ public:
                         stored_height = lde_height;
                     } else {
                         // All matrices in a height group must share the same height.
-                        P3_ASSERT(stored_height == lde_height);
+                        if (stored_height != lde_height) {
+                            throw std::runtime_error(
+                                "TwoAdicFriPcs::open: mismatched LDE heights within a height group");
+                        }
                     }
                 }
             }

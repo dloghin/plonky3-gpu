@@ -21,6 +21,7 @@ endif()
 add_executable(fri_tests
     test_fri.cpp
     fri_test.cpp
+    test_two_adic_fri_pcs.cpp
 )
 
 target_link_libraries(fri_tests
@@ -40,6 +41,7 @@ target_include_directories(fri_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../challenger/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../dft/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../interpolation/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../merkle_tree/include
 )
 
 # Discover tests

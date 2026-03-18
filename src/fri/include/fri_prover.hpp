@@ -54,11 +54,23 @@ FriProof<Challenge, FriMmcs, Witness, InputProof> prove_fri(
         throw std::invalid_argument("prove_fri: no input vectors");
     }
 
+    // The smallest input must be strictly larger than the final domain height
+    // so that at least one folding round is possible (matching Rust's assert).
+    if (params.log_final_poly_len > 0) {
+        size_t log_min_height = p3_util::log2_strict_usize(inputs.back().size());
+        size_t log_final_h = params.log_final_height();
+        if (log_min_height <= log_final_h) {
+            throw std::invalid_argument(
+                "prove_fri: smallest input (log_height=" +
+                std::to_string(log_min_height) +
+                ") must be strictly larger than log_final_height=" +
+                std::to_string(log_final_h));
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Commit phase
     // -------------------------------------------------------------------------
-    // We maintain `current` as the running evaluation vector.
-    // inputs[0] is the largest; subsequent inputs are mixed in as we fold.
     std::vector<Challenge> current = std::move(inputs[0]);
     size_t input_idx = 1;  // index into remaining inputs
 

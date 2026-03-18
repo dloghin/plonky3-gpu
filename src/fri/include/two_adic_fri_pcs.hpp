@@ -104,12 +104,17 @@ struct PcsQueryInputMmcs {
         proof.row_index = query_index;
         proof.row_values.clear();
 
-        // The FRI input vector is stored in bit-reversed order (see open() in TwoAdicFriPcs).
-        // query_index refers to the bit-reversed position. To get the actual LDE row,
-        // we must un-reverse the bits to find the natural-order row index.
+        if (data_vec.empty()) return;
+
+        // data_vec is sorted by descending height; the first entry is the max.
+        size_t max_log_h = p3_util::log2_strict_usize(data_vec[0].lde_height);
+
         for (const auto& d : data_vec) {
             size_t lde_log_h = p3_util::log2_strict_usize(d.lde_height);
-            size_t natural_k = p3_util::reverse_bits_len(query_index % d.lde_height, lde_log_h);
+            // For groups smaller than max, reduce the query index
+            size_t bits_reduced = max_log_h - lde_log_h;
+            size_t reduced_qi = query_index >> bits_reduced;
+            size_t natural_k = p3_util::reverse_bits_len(reduced_qi, lde_log_h);
             for (size_t c = 0; c < d.total_cols; ++c) {
                 proof.row_values.push_back(d.flat_data[natural_k * d.total_cols + c]);
             }
@@ -528,12 +533,17 @@ public:
             }
         }
 
-        // Assign col_offsets within each height group (same grouping as in open())
-        for (auto& [log_h, mats] : mats_by_height) {
-            size_t col_off = 0;
-            for (auto& m : mats) {
-                m.col_offset = col_off;
-                col_off += m.num_cols;
+        // Assign col_offsets: global offsets into ip.row_values.
+        // row_values concatenates [group_0_cols][group_1_cols]... in
+        // descending-log_h order.
+        {
+            size_t global_col_off = 0;
+            for (auto& [log_h, mats] : mats_by_height) {
+                (void)log_h;
+                for (auto& m : mats) {
+                    m.col_offset = global_col_off;
+                    global_col_off += m.num_cols;
+                }
             }
         }
 
@@ -545,50 +555,58 @@ public:
             }
         }
 
-        // eval_at_query: compute quotient at queried position using proof row values
-        auto eval_fn = [&, alpha_capture = alpha, all_mats_capture = std::move(all_mats),
-                         max_lde_log_h_capture = max_lde_log_h]
-            (size_t query_index, size_t /*log_max_height*/, const FriInputProof& ip)
-            -> Challenge
+        // open_input: for each query, compute the reduced quotient opening for
+        // every height group.  Returns FriOpenings<Challenge> sorted by
+        // descending log_height.
+        auto open_input_fn = [&, alpha_capture = alpha,
+                               all_mats_capture = std::move(all_mats),
+                               max_lde_log_h_capture = max_lde_log_h]
+            (size_t query_index, size_t log_max_height, const FriInputProof& ip)
+            -> FriOpenings<Challenge>
         {
-            Challenge result = Challenge::zero_val();
+            // Accumulate (alpha_pow, reduced_opening) per log_height
+            std::map<size_t, Challenge, std::greater<size_t>> ro_map;
 
             for (const auto& info : all_mats_capture) {
-                // Only process matrices from the largest LDE height group
-                // (those that correspond to the first FRI input)
-                if (info.lde_log_h != max_lde_log_h_capture) continue;
+                // Compute the reduced query index for this height group.
+                // Larger groups use the raw query_index; smaller groups
+                // right-shift to account for the height difference.
+                size_t bits_reduced = log_max_height - info.lde_log_h;
+                size_t reduced_qi = query_index >> bits_reduced;
 
-                // The FRI input is in bit-reversed order: position query_index holds
-                // the evaluation at omega^{bit_rev(query_index, lde_log_h)}.
-                // The proof's row_values contain lde[bit_rev(query_index, lde_log_h)],
-                // and the domain point x is shift * omega^{bit_rev(k, lde_log_h)}.
-                size_t k_birev = query_index % info.lde_height;
+                size_t k_birev = reduced_qi % info.lde_height;
                 size_t k_nat   = p3_util::reverse_bits_len(k_birev, info.lde_log_h);
                 Val omega      = Val::two_adic_generator(info.lde_log_h);
                 Val x_val      = info.shift * omega.exp_u64(static_cast<uint64_t>(k_nat));
                 Challenge x_k  = Challenge::from_base(x_val);
 
+                auto& ro = ro_map[info.lde_log_h];
+
                 for (size_t pi = 0; pi < info.opening_points.size(); ++pi) {
-                    const Challenge& z_j   = info.opening_points[pi];
-                    Challenge denom_inv    = (z_j - x_k).inv();
+                    const Challenge& z_j = info.opening_points[pi];
+                    Challenge denom_inv  = (z_j - x_k).inv();
 
                     for (size_t col = 0; col < info.num_cols; ++col) {
-                        Challenge f_z  = info.opened_vals[pi][col];
+                        Challenge f_z = info.opened_vals[pi][col];
 
-                        // Get f(x_k) from the proof's row values
                         size_t val_idx = info.col_offset + col;
                         Challenge f_x  = (val_idx < ip.row_values.size())
                             ? Challenge::from_base(ip.row_values[val_idx])
                             : Challenge::zero_val();
 
-                        Challenge numer   = f_z - f_x;
-                        size_t pow        = info.alpha_pow_start + pi * info.num_cols + col;
-                        Challenge apow_v  = alpha_capture.exp_u64(static_cast<uint64_t>(pow));
-                        result           += apow_v * numer * denom_inv;
+                        Challenge numer  = f_z - f_x;
+                        size_t pow       = info.alpha_pow_start + pi * info.num_cols + col;
+                        Challenge apow_v = alpha_capture.exp_u64(static_cast<uint64_t>(pow));
+                        ro              += apow_v * numer * denom_inv;
                     }
                 }
             }
 
+            FriOpenings<Challenge> result;
+            result.reserve(ro_map.size());
+            for (auto& [lh, ro] : ro_map) {
+                result.push_back({lh, ro});
+            }
             return result;
         };
 
@@ -599,7 +617,7 @@ public:
             proof,
             challenger,
             query_mmcs_,
-            eval_fn
+            open_input_fn
         );
     }
 };

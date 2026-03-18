@@ -1,11 +1,15 @@
 /**
  * @file fri_test.cpp
- * @brief Google Test suite for FRI LDT test using real Poseidon2, MerkleTreeMmcs,
- *        ExtensionMmcs, and TwoAdicFriPcs.
+ * @brief Google Test suite for FRI LDT end-to-end test using real Poseidon2,
+ *        MerkleTreeMmcs, ExtensionMmcs, and TwoAdicFriPcs.
+ *
+ * Mirrors plonky3/fri/tests/fri.rs.
  *
  * Tests:
- *  - FriTest.test_fri_ldt  – prove+verify round-trip for various polynomial sizes
- *  - FriTest.test_fri_ldt_should_panic – verify fails for inconsistent opened values
+ *  - FriTest.test_fri_ldt  – prove+verify round-trip for various polynomial
+ *    sizes with log_final_poly_len in {0, 1, 2, 3, 4}.
+ *  - FriTest.test_fri_ldt_should_panic – should panic/throw when
+ *    log_final_poly_len is too large for the smallest polynomial.
  */
 
 #include <gtest/gtest.h>
@@ -77,32 +81,17 @@ struct Poseidon2BB16 {
 // Type aliases for the FRI stack
 // ============================================================================
 
-// Permutation type
-using Perm16 = Poseidon2BB16;
-
-// Hash function: PaddingFreeSponge<Perm16, BB, WIDTH=16, RATE=8, OUT=8>
-using MyHash = p3_symmetric::PaddingFreeSponge<Perm16, BB, 16, 8, 8>;
-
-// Compressor: TruncatedPermutation<Perm16, BB, N=2, CHUNK=8, WIDTH=16>
-using MyCompress = p3_symmetric::TruncatedPermutation<Perm16, BB, 2, 8, 16>;
-
-// Val MMCS: MerkleTreeMmcs<BB, BB, MyHash, MyCompress, N_ARY=2, CHUNK=8>
-using ValMmcs = p3_merkle::MerkleTreeMmcs<BB, BB, MyHash, MyCompress, 2, 8>;
-
-// Extension MMCS: wraps ValMmcs, commits BB4 matrices
-using EFMmcs = p3_merkle::ExtensionMmcs<BB, BB4, ValMmcs>;
-
-// DFT
-using MyDft = p3_dft::Radix2Dit<BB>;
-
-// FRI parameters use EFMmcs as the FriMmcs
-using FriParams = FriParameters<EFMmcs>;
-
-// PCS
-using MyPcs = TwoAdicFriPcs<BB, BB4, MyDft, ValMmcs, EFMmcs>;
+using Perm16      = Poseidon2BB16;
+using MyHash      = p3_symmetric::PaddingFreeSponge<Perm16, BB, 16, 8, 8>;
+using MyCompress  = p3_symmetric::TruncatedPermutation<Perm16, BB, 2, 8, 16>;
+using ValMmcs     = p3_merkle::MerkleTreeMmcs<BB, BB, MyHash, MyCompress, 2, 8>;
+using EFMmcs      = p3_merkle::ExtensionMmcs<BB, BB4, ValMmcs>;
+using MyDft       = p3_dft::Radix2Dit<BB>;
+using FriParams   = FriParameters<EFMmcs>;
+using MyPcs       = TwoAdicFriPcs<BB, BB4, MyDft, ValMmcs, EFMmcs>;
 
 // ============================================================================
-// FriDuplexChallenger: thin wrapper around DuplexChallenger for FRI use
+// FriChallenger: thin wrapper around DuplexChallenger for FRI use
 // ============================================================================
 
 using BaseDuplexChallenger = p3_challenger::DuplexChallenger<BB, Perm16, 16, 8>;
@@ -117,9 +106,6 @@ struct FriChallenger {
     template <typename Commit>
     void observe_commitment(const Commit& c) { inner.observe_merkle_cap(c); }
 
-    // Templated with default=BB4 so it works for both:
-    //   challenger.sample_challenge()         (FRI prover/verifier, returns BB4)
-    //   challenger.template sample_challenge<BB4>()  (PCS, explicit type)
     template <typename EF = BB4>
     EF sample_challenge() { return inner.template sample_algebra_element<EF>(); }
 
@@ -160,22 +146,35 @@ static EFMmcs make_ef_mmcs() {
     return EFMmcs(make_val_mmcs());
 }
 
-static MyPcs make_pcs(size_t log_blowup = 1,
-                      size_t log_final_poly_len = 0) {
+// Create PCS matching the Rust test: log_blowup=1, max_log_arity=1,
+// num_queries=10, query_pow_bits=8.
+static MyPcs make_pcs(size_t log_final_poly_len) {
     MyDft dft;
     auto val_mmcs = make_val_mmcs();
 
     FriParams fri{
-        log_blowup,            // log_blowup
+        1,                     // log_blowup
         log_final_poly_len,    // log_final_poly_len
-        1,                     // max_log_arity
-        4,                     // num_queries
+        1,                     // max_log_arity  (matches Rust test)
+        10,                    // num_queries    (matches Rust test)
         0,                     // commit_proof_of_work_bits
-        0,                     // query_proof_of_work_bits
+        8,                     // query_proof_of_work_bits (matches Rust test)
         make_ef_mmcs()         // mmcs
     };
 
     return MyPcs(std::move(dft), std::move(val_mmcs), std::move(fri));
+}
+
+// Generate a deterministic non-zero matrix of size (rows x cols).
+static p3_matrix::RowMajorMatrix<BB> rand_nonzero_matrix(
+    std::mt19937_64& rng, size_t rows, size_t cols)
+{
+    std::uniform_int_distribution<uint32_t> dist(1, BB::PRIME - 1);
+    std::vector<BB> vals(rows * cols);
+    for (auto& v : vals) {
+        v = BB(dist(rng));
+    }
+    return p3_matrix::RowMajorMatrix<BB>(std::move(vals), cols);
 }
 
 // ============================================================================
@@ -183,55 +182,57 @@ static MyPcs make_pcs(size_t log_blowup = 1,
 //
 // Creates polynomials of sizes given in `polynomial_log_sizes`, commits them,
 // opens at a random challenge point, proves, and verifies.
+// Mirrors plonky3/fri/tests/fri.rs::do_test_fri_ldt.
 // ============================================================================
 
-static void do_test_fri_ldt(size_t log_final_poly_len,
-                              const std::vector<size_t>& polynomial_log_sizes)
+static void do_test_fri_ldt(uint64_t seed,
+                            size_t log_final_poly_len,
+                            const std::vector<uint8_t>& polynomial_log_sizes)
 {
     using Domain = TwoAdicMultiplicativeCoset<BB>;
 
-    auto pcs = make_pcs(/*log_blowup=*/1, log_final_poly_len);
+    auto pcs = make_pcs(log_final_poly_len);
 
-    // Build evaluation matrices (one polynomial per log_size)
-    // We evaluate the polynomial f(x) = 1 at all points (trivial LDE)
-    // using the coset-LDE approach.
+    // Convert polynomial_log_sizes to field elements for observation
+    std::vector<BB> val_sizes;
+    val_sizes.reserve(polynomial_log_sizes.size());
+    for (auto s : polynomial_log_sizes) {
+        val_sizes.push_back(BB(static_cast<uint32_t>(s)));
+    }
+
+    // RNG for generating random evaluation matrices
+    std::mt19937_64 rng(seed);
+
+    // --- Prover World ---
+    auto p_challenger = make_fri_challenger();
+    p_challenger.observe_slice(val_sizes);
+
+    // Generate random evaluation matrices (one per polynomial)
     std::vector<std::pair<Domain, p3_matrix::RowMajorMatrix<BB>>> eval_mats;
-
-    for (size_t log_n : polynomial_log_sizes) {
-        size_t n = size_t(1) << log_n;
+    for (auto deg_bits : polynomial_log_sizes) {
+        size_t deg = size_t(1) << deg_bits;
         Domain domain;
-        domain.log_n = log_n;
-        domain.shift = BB::one_val();  // standard subgroup
+        domain.log_n = deg_bits;
+        domain.shift = BB::one_val();
 
-        // Create evaluation matrix: n rows, 1 column, with values f(x_i) = i+1 (mod p)
-        std::vector<BB> vals(n);
-        for (size_t i = 0; i < n; ++i) {
-            vals[i] = BB(static_cast<uint32_t>((i * 3 + 7) % BB::PRIME));
-        }
-        p3_matrix::RowMajorMatrix<BB> mat(std::move(vals), 1);
+        auto mat = rand_nonzero_matrix(rng, deg, 16);
         eval_mats.push_back({domain, std::move(mat)});
     }
 
-    // Commit
-    auto p_challenger = make_fri_challenger();
-    auto v_challenger = make_fri_challenger();
+    size_t num_evaluations = eval_mats.size();
 
+    // Commit
     auto [commitment, prover_data] = pcs.commit(std::move(eval_mats));
 
-    // Both challengers observe the commitment
     p_challenger.observe_commitment(commitment);
-    v_challenger.observe_commitment(commitment);
 
-    // Both challengers sample the opening point zeta
-    BB4 zeta_p = p_challenger.template sample_challenge<BB4>();
-    BB4 zeta_v = v_challenger.template sample_challenge<BB4>();
-    // They should be equal since challengers are in the same state
-    ASSERT_EQ(zeta_p, zeta_v) << "Prover and verifier challengers diverged at zeta sampling";
+    // Sample opening point zeta
+    BB4 zeta = p_challenger.template sample_challenge<BB4>();
 
-    // Build open_data: one batch, one matrix per log_size, each opened at zeta
+    // Build open_data: one batch, every polynomial opened at zeta
     std::vector<std::vector<BB4>> mat_points;
-    for (size_t i = 0; i < polynomial_log_sizes.size(); ++i) {
-        mat_points.push_back({zeta_p});  // single opening point
+    for (size_t i = 0; i < num_evaluations; ++i) {
+        mat_points.push_back({zeta});
     }
 
     std::vector<std::pair<const MyPcs::PcsProverData*,
@@ -240,6 +241,15 @@ static void do_test_fri_ldt(size_t log_final_poly_len,
 
     // Open (prove)
     auto [opened_values, fri_proof] = pcs.open(open_data, p_challenger);
+
+    // --- Verifier World ---
+    auto v_challenger = make_fri_challenger();
+    v_challenger.observe_slice(val_sizes);
+    v_challenger.observe_commitment(commitment);
+
+    BB4 v_zeta = v_challenger.template sample_challenge<BB4>();
+    ASSERT_EQ(zeta, v_zeta)
+        << "Prover and verifier challengers diverged at zeta sampling";
 
     // Build verify inputs
     std::vector<MyPcs::VerifyCommitment> verify_inputs;
@@ -252,7 +262,7 @@ static void do_test_fri_ldt(size_t log_final_poly_len,
             domain.log_n = polynomial_log_sizes[mi];
             domain.shift = BB::one_val();
             vc.domains.push_back(domain);
-            vc.points.push_back({zeta_v});
+            vc.points.push_back({v_zeta});
             vc.opened_values.push_back(opened_values[0][mi]);
         }
         verify_inputs.push_back(std::move(vc));
@@ -260,7 +270,13 @@ static void do_test_fri_ldt(size_t log_final_poly_len,
 
     // Verify
     bool ok = pcs.verify(verify_inputs, fri_proof, v_challenger);
-    EXPECT_TRUE(ok) << "verify() returned false for log_final_poly_len=" << log_final_poly_len;
+    EXPECT_TRUE(ok) << "verify() returned false for log_final_poly_len="
+                    << log_final_poly_len << " seed=" << seed;
+
+    // Check prover and verifier challengers agree
+    EXPECT_EQ(p_challenger.sample_bits(8), v_challenger.sample_bits(8))
+        << "Prover and verifier transcript mismatch after FRI "
+        << "(log_final_poly_len=" << log_final_poly_len << " seed=" << seed << ")";
 }
 
 // ============================================================================
@@ -268,143 +284,41 @@ static void do_test_fri_ldt(size_t log_final_poly_len,
 // ============================================================================
 
 TEST(FriTest, test_fri_ldt) {
-    // Test with a variety of log_final_poly_len values
-    for (size_t log_fpl = 0; log_fpl <= 3; ++log_fpl) {
-        // Use a single polynomial of size 2^(log_fpl + 2) to ensure it's
-        // larger than the final poly len
-        size_t log_poly = log_fpl + 2;  // e.g. log_fpl=0 -> log_poly=2 (4 evals)
-        SCOPED_TRACE("log_final_poly_len=" + std::to_string(log_fpl) +
-                     " log_poly=" + std::to_string(log_poly));
-        do_test_fri_ldt(log_fpl, {log_poly});
+    // Matches the Rust test: multiple polynomials of varying sizes,
+    // including duplicates and out-of-order.
+    std::vector<uint8_t> polynomial_log_sizes = {5, 8, 10, 7, 5, 5, 7};
+    for (size_t i = 0; i < 5; ++i) {
+        SCOPED_TRACE("log_final_poly_len=" + std::to_string(i) +
+                     " seed=" + std::to_string(i));
+        do_test_fri_ldt(i, i, polynomial_log_sizes);
     }
 }
 
 TEST(FriTest, test_fri_ldt_should_panic) {
-    // log_final_poly_len = 5, polynomial of size 2^3 = 8
-    // After blowup of 2, LDE size = 16, log_final_height = 1 + 5 = 6.
-    // But log_lde_height = 4 < log_final_height = 6, so prove_fri should throw
-    // (no folding rounds can happen: current.size() <= 2^log_final_height already).
-    //
-    // Actually prove_fri throws "no input vectors" only if inputs is empty.
-    // It'll just short-circuit the folding loop.  The throw we want is either:
-    //  (a) prove_fri throws if final poly is longer than input, or
-    //  (b) we force it by making log_final_poly_len too big.
-    //
-    // Let's use log_final_poly_len = 5 and log_poly = 2, blowup = 1:
-    //   lde_height = 2^2 * 2^1 = 8
-    //   log_final_height = 1 + 5 = 6  -> 2^6 = 64 > lde_height = 8
-    // prove_fri: current.size() = 8; loop condition 8 > 64 is false -> no folding.
-    // final_poly resized to 2^5 = 32 > current.size() = 8 -> truncation is fine
-    // but then IDFT on 32 elements with only 8 actual evaluations would be wrong.
-    //
-    // Actually, prove_fri resizes current to fpl = 2^5 = 32, but current.size() = 8.
-    // resize(32) would zero-pad. Then reverse_slice_index_bits(32) would work.
-    // The test should FAIL verification, not necessarily throw.
-    //
-    // Let's trigger an actual exception by using log_final_poly_len that makes
-    // log_final_height > log(input_size), which causes log2_strict to throw
-    // when computing the final poly IDFT on a non-power-of-2... actually no.
-    //
-    // The clearest way: use a polynomial that is too small for the FRI parameters
-    // so that the final polynomial verification fails or an invariant is violated.
-    //
-    // In prove_fri, when current.size() <= 2^log_final_height and no folding occurs,
-    // final_poly is set to current.resize(fpl=2^log_final_poly_len).
-    // If fpl > current.size(), the resize zero-pads, IDFT runs on zeros,
-    // and the result is a polynomial that doesn't match the claimed evaluations.
-    // The verifier will fail because the final polynomial evaluation won't match
-    // the folded value.
-    //
-    // For a guaranteed exception, let's construct a case where a mathematical
-    // invariant fails. We use log_final_poly_len=5 with log_poly=2.
-    // This should either throw or return false from verify.
-    // We wrap in try/catch and also check EXPECT_FALSE.
+    // log_final_poly_len = 5: smallest polynomial has degree 2^5 = 32.
+    // After blowup (2x), its LDE height is 64 = 2^6.
+    // log_final_height = log_blowup + log_final_poly_len = 1 + 5 = 6.
+    // The smallest LDE (height 64) equals the final height, meaning no
+    // folding is possible for that input.  The Rust implementation asserts
+    // that log_min_height > log_final_poly_len + log_blowup, so this
+    // should either throw or produce a proof that doesn't verify.
+    std::vector<uint8_t> polynomial_log_sizes = {5, 8, 10, 7, 5, 5, 7};
 
-    size_t log_fpl   = 5;
-    size_t log_poly  = 2;
-
-    // Override the PCS to use these params
-    MyDft dft;
-    auto val_mmcs = make_val_mmcs();
-
-    FriParams fri{
-        1,               // log_blowup
-        log_fpl,         // log_final_poly_len
-        1,               // max_log_arity
-        1,               // num_queries
-        0,               // commit_proof_of_work_bits
-        0,               // query_proof_of_work_bits
-        make_ef_mmcs()   // mmcs
-    };
-
-    MyPcs pcs(std::move(dft), std::move(val_mmcs), std::move(fri));
-
-    using Domain = TwoAdicMultiplicativeCoset<BB>;
-    size_t n = size_t(1) << log_poly;
-
-    Domain domain;
-    domain.log_n = log_poly;
-    domain.shift = BB::one_val();
-
-    std::vector<BB> vals(n);
-    for (size_t i = 0; i < n; ++i) {
-        vals[i] = BB(static_cast<uint32_t>(i + 1));
-    }
-    p3_matrix::RowMajorMatrix<BB> mat(std::move(vals), 1);
-
-    std::vector<std::pair<Domain, p3_matrix::RowMajorMatrix<BB>>> eval_mats;
-    eval_mats.push_back({domain, std::move(mat)});
-
-    auto p_challenger = make_fri_challenger();
-    auto v_challenger = make_fri_challenger();
-
-    // This may or may not throw depending on implementation details.
-    // We expect EITHER an exception OR verify returning false.
     bool threw = false;
     bool verified = false;
 
     try {
-        auto [commitment, prover_data] = pcs.commit(std::move(eval_mats));
-
-        p_challenger.observe_commitment(commitment);
-        v_challenger.observe_commitment(commitment);
-
-        BB4 zeta = p_challenger.template sample_challenge<BB4>();
-        v_challenger.template sample_challenge<BB4>();  // advance verifier state
-
-        std::vector<std::vector<BB4>> mat_points = {{zeta}};
-        std::vector<std::pair<const MyPcs::PcsProverData*,
-                              std::vector<std::vector<BB4>>>> open_data;
-        open_data.push_back({&prover_data, mat_points});
-
-        auto [opened_values, fri_proof] = pcs.open(open_data, p_challenger);
-
-        // Build verify input
-        std::vector<MyPcs::VerifyCommitment> verify_inputs;
-        {
-            MyPcs::VerifyCommitment vc;
-            vc.commitment = commitment;
-            Domain vdomain;
-            vdomain.log_n = log_poly;
-            vdomain.shift = BB::one_val();
-            vc.domains.push_back(vdomain);
-            // Corrupt opened values to cause failure
-            auto ov_corrupt = opened_values[0][0];
-            if (!ov_corrupt.empty() && !ov_corrupt[0].empty()) {
-                // Flip the first coefficient to make verification fail
-                ov_corrupt[0][0] = ov_corrupt[0][0] + BB4::from_base(BB(1u));
-            }
-            vc.points.push_back({zeta});
-            vc.opened_values.push_back(ov_corrupt);
-            verify_inputs.push_back(std::move(vc));
-        }
-
-        verified = pcs.verify(verify_inputs, fri_proof, v_challenger);
-    } catch (const std::exception& e) {
+        // This may throw during commit, open, or prove
+        do_test_fri_ldt(5, 5, polynomial_log_sizes);
+        // If do_test_fri_ldt completes without assertion failure, it means
+        // the EXPECT_TRUE inside it passed.  We consider that a "verified"
+        // result for the purpose of this test.
+        verified = true;
+    } catch (const std::exception&) {
         threw = true;
     }
 
-    // Either an exception was thrown OR verification failed
     EXPECT_TRUE(threw || !verified)
-        << "Expected exception or verification failure for mismatched opened values";
+        << "Expected exception or verification failure for "
+           "log_final_poly_len=5 with polynomial_log_sizes containing 5";
 }

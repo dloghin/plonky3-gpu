@@ -147,7 +147,7 @@ TEST(MerkleTree, SingleMatrixCapHeight2) {
     auto [cap, tree] = mmcs.commit({std::move(mat)});
 
     EXPECT_EQ(cap.cap.size(), 4u);
-    // digest_layers: [8, 4, 2] — only two compression steps
+    // digest_layers: [8, 4] — one compression step; cap is the second layer
     EXPECT_EQ(tree.digest_layers.size(), 2u);
     EXPECT_EQ(tree.digest_layers[0].size(), 8u);
     EXPECT_EQ(tree.digest_layers[1].size(), 4u);
@@ -382,6 +382,42 @@ TEST(MerkleTree, RoundTripCapHeight2) {
         EXPECT_TRUE(mmcs.verify_batch(cap, dims, i, opening))
             << "cap_height=2 round-trip failed at index " << i;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Round-trip: reversed matrix order (short before tall)
+// ---------------------------------------------------------------------------
+
+TEST(MerkleTree, RoundTripMixedHeightReversedOrder) {
+    auto short_ = make_matrix(4, 3, 100);
+    auto tall   = make_matrix(8, 2, 1);
+
+    Dimensions short_dims = short_.dimensions();
+    Dimensions tall_dims  = tall.dimensions();
+    std::vector<Dimensions> dims = { short_dims, tall_dims };
+
+    MockMmcs mmcs(MockHasher<DE>{}, MockCompressor<DE>{}, 0);
+    auto [cap, tree] = mmcs.commit({std::move(short_), std::move(tall)});
+
+    for (size_t i = 0; i < 8; ++i) {
+        auto opening = mmcs.open_batch(i, tree);
+        EXPECT_TRUE(mmcs.verify_batch(cap, dims, i, opening))
+            << "Reversed-order mixed-height round-trip failed at index " << i;
+    }
+}
+
+TEST(MerkleTree, CommitOrderIndependent) {
+    auto tall1  = make_matrix(8, 2, 1);
+    auto short1 = make_matrix(4, 3, 100);
+    auto tall2  = make_matrix(8, 2, 1);
+    auto short2 = make_matrix(4, 3, 100);
+
+    MockMmcs mmcs(MockHasher<DE>{}, MockCompressor<DE>{}, 0);
+    auto [cap1, t1] = mmcs.commit({std::move(tall1), std::move(short1)});
+    auto [cap2, t2] = mmcs.commit({std::move(short2), std::move(tall2)});
+
+    EXPECT_EQ(cap1, cap2)
+        << "Commitment should be the same regardless of matrix order";
 }
 
 // ---------------------------------------------------------------------------

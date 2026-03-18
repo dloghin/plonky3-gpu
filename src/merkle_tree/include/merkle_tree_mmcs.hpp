@@ -23,7 +23,6 @@
 #include <array>
 #include <cassert>
 #include <cstddef>
-#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -120,7 +119,7 @@ public:
      */
     Opening open_batch(size_t index, const ProverData& tree) const {
         const size_t max_height = tree.digest_layers[0].size();
-        // Number of proof steps = number of layers below the cap.
+        assert(index < max_height && "index out of bounds for tree height");
         const size_t num_steps  = tree.digest_layers.size() - 1;
 
         Opening result;

@@ -89,27 +89,29 @@ MerkleTree<F, W, DIGEST_ELEMS> build_merkle_tree(
 {
     assert(!matrices.empty() && "need at least one matrix");
 
-    // Step 1: Sort by height descending, keeping original order for same heights.
-    std::stable_sort(matrices.begin(), matrices.end(),
-        [](const RowMajorMatrix<F>& a, const RowMajorMatrix<F>& b) {
-            return a.height() > b.height();
+    // Step 1: Create sorted indices by height descending (stable for equal heights).
+    // Mirrors the Rust reference which iterates in sorted order but stores leaves
+    // in their original insertion order.
+    std::vector<size_t> sorted_indices(matrices.size());
+    std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
+    std::stable_sort(sorted_indices.begin(), sorted_indices.end(),
+        [&](size_t a, size_t b) {
+            return matrices[a].height() > matrices[b].height();
         });
 
-    const size_t max_height = matrices[0].height();
+    const size_t max_height = matrices[sorted_indices[0]].height();
     assert(max_height > 0 && "matrices must be non-empty");
     assert((max_height & (max_height - 1)) == 0 &&
            "matrix height must be a power of two");
 
-    // We process matrices in groups of equal height.
-    // 'next_mat' is the index of the next unprocessed matrix.
-    size_t next_mat = 0;
+    // Walk through sorted_indices in groups of equal height.
+    size_t next_sorted = 0;
 
-    // Helper: collect all matrices whose height equals `h` starting at next_mat,
-    // advancing next_mat past them.
     auto collect_at_height = [&](size_t h) -> std::vector<size_t> {
         std::vector<size_t> indices;
-        while (next_mat < matrices.size() && matrices[next_mat].height() == h) {
-            indices.push_back(next_mat++);
+        while (next_sorted < sorted_indices.size() &&
+               matrices[sorted_indices[next_sorted]].height() == h) {
+            indices.push_back(sorted_indices[next_sorted++]);
         }
         return indices;
     };

@@ -214,7 +214,8 @@ public:
 
                 for (size_t col = 0; col < nw; ++col) {
                     Challenge fz = opened_values[b][j][col];
-                    Challenge ak = alpha.exp_u64(static_cast<uint64_t>(alpha_idx++));
+                    Challenge ak = alpha_power;
+                    alpha_power *= alpha;
                     for (size_t i = 0; i < n_lde; ++i) {
                         // row i of bit-reversed matrix = f(x_{br(i)})
                         Val fx_val = mmcs_.get_value(od.prover_data, od.mat_idx, i, col);
@@ -279,7 +280,7 @@ public:
                            const InputProof& ip) -> Challenge
         {
             Challenge result = Challenge::zero_val();
-            size_t alpha_idx = 0;
+            Challenge alpha_power = Challenge::one_val();
 
             for (size_t b = 0; b < nb; ++b) {
                 auto& d        = data[b];
@@ -306,8 +307,8 @@ public:
                         // f(x) comes from the input proof (opened LDE row values)
                         Val fx_val = mmcs_.get_proof_value(ip, b, local_idx, col);
                         Challenge fx = embed_base<Val, Challenge>(fx_val);
-                        Challenge ak = alpha.exp_u64(static_cast<uint64_t>(alpha_idx++));
-                        result = result + ak * (fz - fx) * denom_inv;
+                        result += alpha_power * (fz - fx) * denom_inv;
+                        alpha_power *= alpha;
                     }
                 }
             }

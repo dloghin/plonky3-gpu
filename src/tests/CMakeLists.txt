@@ -1,0 +1,64 @@
+cmake_minimum_required(VERSION 3.15)
+
+find_package(GTest QUIET)
+
+if(NOT GTest_FOUND)
+    message(STATUS "Google Test not found, fetching from GitHub...")
+    include(FetchContent)
+
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.15.2
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+endif()
+
+include(GoogleTest)
+
+function(add_plonky3_test name)
+    add_executable(${name} ${ARGN})
+    target_link_libraries(${name} PRIVATE plonky3 GTest::gtest_main)
+    gtest_discover_tests(${name})
+endfunction()
+
+# -- Field tests --
+add_plonky3_test(field_two_adic_tests test_two_adic.cpp)
+
+add_plonky3_test(field_extension_tests test_extension_field.cpp)
+
+# -- Matrix tests --
+add_plonky3_test(matrix_tests test_matrix.cpp)
+
+add_plonky3_test(dense_matrix_tests test_dense_matrix.cpp)
+
+add_plonky3_test(matrix_util_tests test_matrix_util.cpp)
+
+# -- Util tests --
+add_plonky3_test(util_tests test_util.cpp)
+
+add_plonky3_test(linear_map_tests test_linear_map.cpp)
+
+# -- DFT tests --
+add_plonky3_test(dft_tests test_dft.cpp)
+
+add_plonky3_test(ntt_cuda_tests test_ntt_cuda.cpp)
+
+# -- FRI tests --
+add_plonky3_test(fri_tests test_fri.cpp fri_test.cpp test_two_adic_fri_pcs.cpp)
+
+# -- Merkle tree tests --
+add_plonky3_test(merkle_tree_tests test_merkle_tree.cpp)
+
+# -- Commit tests --
+add_plonky3_test(commit_tests test_commit.cpp)
+
+# -- Challenger tests --
+add_plonky3_test(challenger_tests test_challenger.cpp)
+
+# -- Symmetric tests --
+add_plonky3_test(symmetric_tests test_symmetric.cpp)
+
+# -- Interpolation tests --
+add_plonky3_test(interpolation_tests test_interpolation.cpp)

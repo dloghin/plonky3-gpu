@@ -394,43 +394,67 @@ public:
         // that contains the original LDE rows so the verifier can reconstruct quotients.
         std::vector<QueryProverData> query_input_data;
         {
-            // We need to match the order of fri_inputs_map (descending log_h)
-            // For each fri_input[i], find the corresponding LDE data
-            // Rebuild the map to iterate in descending order
-            std::map<size_t, QueryProverData, std::greater<size_t>> qpd_map;
+            // We need to match the order of fri_inputs_map (descending log_h).
+            // For each fri_input[i], find the corresponding LDE data.
+            // First pass: compute total width per height group so we can allocate once.
+            std::map<size_t, size_t, std::greater<size_t>> total_cols_per_log_h;
+            std::map<size_t, size_t, std::greater<size_t>> height_per_log_h;
 
             for (size_t bi = 0; bi < open_data.size(); ++bi) {
-                const auto* pcs_data   = open_data[bi].first;
+                const auto* pcs_data = open_data[bi].first;
 
                 for (size_t mi = 0; mi < pcs_data->lde_matrices.size(); ++mi) {
-                    const auto& lde     = pcs_data->lde_matrices[mi];
-                    size_t lde_height   = lde.height();
-                    size_t lde_log_h    = p3_util::log2_strict_usize(lde_height);
-                    size_t num_cols     = lde.width();
+                    const auto& lde   = pcs_data->lde_matrices[mi];
+                    size_t lde_height = lde.height();
+                    size_t lde_log_h  = p3_util::log2_strict_usize(lde_height);
+                    size_t num_cols   = lde.width();
 
-                    auto& qpd = qpd_map[lde_log_h];
-                    if (qpd.flat_data.empty()) {
-                        qpd.lde_height = lde_height;
-                        qpd.total_cols = 0;
-                        qpd.flat_data.resize(0);
+                    total_cols_per_log_h[lde_log_h] += num_cols;
+
+                    auto& stored_height = height_per_log_h[lde_log_h];
+                    if (stored_height == 0) {
+                        stored_height = lde_height;
+                    } else {
+                        // All matrices in a height group must share the same height.
+                        P3_ASSERT(stored_height == lde_height);
                     }
+                }
+            }
 
-                    // Append this matrix's columns to the prover data
-                    size_t old_cols = qpd.total_cols;
-                    size_t new_cols = old_cols + num_cols;
-                    std::vector<Val> new_flat(lde_height * new_cols);
+            // Allocate ProverData for each height group once with final size.
+            std::map<size_t, QueryProverData, std::greater<size_t>> qpd_map;
+            for (const auto& [lde_log_h, total_cols] : total_cols_per_log_h) {
+                QueryProverData qpd;
+                size_t lde_height = height_per_log_h.at(lde_log_h);
+                qpd.lde_height    = lde_height;
+                qpd.total_cols    = total_cols;
+                qpd.flat_data.resize(lde_height * total_cols);
+                qpd_map.emplace(lde_log_h, std::move(qpd));
+            }
+
+            // Second pass: fill the flat_data buffers without reallocations.
+            std::map<size_t, size_t, std::greater<size_t>> col_offset_per_log_h;
+
+            for (size_t bi = 0; bi < open_data.size(); ++bi) {
+                const auto* pcs_data = open_data[bi].first;
+
+                for (size_t mi = 0; mi < pcs_data->lde_matrices.size(); ++mi) {
+                    const auto& lde   = pcs_data->lde_matrices[mi];
+                    size_t lde_height = lde.height();
+                    size_t lde_log_h  = p3_util::log2_strict_usize(lde_height);
+                    size_t num_cols   = lde.width();
+
+                    auto& qpd        = qpd_map[lde_log_h];
+                    size_t col_start = col_offset_per_log_h[lde_log_h];
+
                     for (size_t r = 0; r < lde_height; ++r) {
-                        // Copy old columns
-                        for (size_t c = 0; c < old_cols; ++c) {
-                            new_flat[r * new_cols + c] = qpd.flat_data[r * old_cols + c];
-                        }
-                        // Append new columns
                         for (size_t c = 0; c < num_cols; ++c) {
-                            new_flat[r * new_cols + old_cols + c] = lde.get_unchecked(r, c);
+                            qpd.flat_data[r * qpd.total_cols + col_start + c] =
+                                lde.get_unchecked(r, c);
                         }
                     }
-                    qpd.flat_data  = std::move(new_flat);
-                    qpd.total_cols = new_cols;
+
+                    col_offset_per_log_h[lde_log_h] += num_cols;
                 }
             }
 

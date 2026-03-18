@@ -540,12 +540,14 @@ TEST(FriRoundTrip, SmallPolynomialConsistency) {
     // Run verifier (reset challenger to same state)
     MockChallenger verifier_challenger;  // fresh challenger, same initial state
 
-    // The verifier needs an eval_at_query callback.
-    // For our mock, we just return the first element of input at the queried index.
-    auto eval_fn = [&](size_t query_index, size_t log_height, const InputProof& /*ip*/) -> BB4 {
-        size_t idx = query_index & (n - 1);  // wrap into [0, n)
+    // The verifier needs an open_input callback that returns
+    // FriOpenings<Challenge> = Vec<(log_height, Challenge)>.
+    auto eval_fn = [&](size_t query_index, size_t log_height, const InputProof& /*ip*/)
+        -> FriOpenings<BB4>
+    {
+        size_t idx = query_index & (n - 1);
         (void)log_height;
-        return input[idx];
+        return {{log_n, input[idx]}};
     };
 
     std::vector<MockMmcsCommitment> in_commits = {input_commit};

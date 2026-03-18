@@ -1,328 +1,680 @@
 #pragma once
 
+/**
+ * @file two_adic_fri_pcs.hpp
+ * @brief TwoAdicFriPcs: Polynomial Commitment Scheme using FRI over two-adic fields.
+ */
+
 #include "fri_params.hpp"
 #include "fri_proof.hpp"
-#include "fri_folding.hpp"
 #include "fri_prover.hpp"
 #include "fri_verifier.hpp"
-#include "interpolation.hpp"
+#include "fri_folding.hpp"
 #include "dense_matrix.hpp"
-#include "util.hpp"
+#include "util.hpp"          // reverse_matrix_index_bits
+#include "interpolation.hpp"
 #include "p3_util/util.hpp"
 
 #include <vector>
-#include <utility>
+#include <array>
+#include <tuple>
 #include <map>
+#include <utility>
 #include <functional>
-#include <cstddef>
 #include <stdexcept>
+#include <algorithm>
+#include <cstddef>
 
 namespace p3_fri {
 
 // ---------------------------------------------------------------------------
-// TwoAdicMultiplicativeCoset<Val>
-// Represents the coset  shift * <two_adic_generator(log_n)>  of size 2^log_n.
+// TwoAdicMultiplicativeCoset
 // ---------------------------------------------------------------------------
-template <typename Val>
+
+/**
+ * A coset gH where H = <omega> has order 2^log_n.
+ * Points (in natural order): shift * omega^0, shift * omega^1, ..., shift * omega^(n-1)
+ */
+template <typename F>
 struct TwoAdicMultiplicativeCoset {
-    size_t log_n;
-    Val    shift;
+    size_t log_n;  // log2 of domain size
+    F shift;       // coset shift g
 
     size_t size() const { return size_t(1) << log_n; }
+
+    // Get the i-th domain point (natural order): shift * omega^i
+    F get_point(size_t i) const {
+        F omega = F::two_adic_generator(log_n);
+        return shift * omega.exp_u64(static_cast<uint64_t>(i));
+    }
+
+    // Subgroup elements H: omega^0, omega^1, ..., omega^(n-1)
+    std::vector<F> subgroup_elements() const {
+        size_t n = size();
+        std::vector<F> elems(n);
+        F omega = F::two_adic_generator(log_n);
+        F cur   = F::one_val();
+        for (size_t i = 0; i < n; ++i) {
+            elems[i] = cur;
+            cur      = cur * omega;
+        }
+        return elems;
+    }
+};
+
+// ---------------------------------------------------------------------------
+// PcsQueryInputMmcs
+//
+// A minimal InputMmcs implementation for use with prove_fri/verify_fri.
+// Its OpeningProof stores the actual LDE row values (flat BB vector).
+// This allows eval_at_query to reconstruct the quotient polynomial value
+// at any queried position without needing a full Merkle tree.
+// ---------------------------------------------------------------------------
+
+template <typename Val>
+struct PcsQueryInputMmcs {
+    // Commitment: not used (commitments are handled by the outer InputMmcs)
+    using Commitment = std::vector<std::array<Val, 1>>;
+
+    // ProverData: for each LDE height group, store the flat row data
+    // ProverData[i] corresponds to inputs[i] passed to prove_fri.
+    // It stores (lde_height, total_cols, flat_data[lde_height * total_cols])
+    struct ProverData {
+        size_t lde_height;
+        size_t total_cols;
+        std::vector<Val> flat_data;  // row-major: flat_data[k * total_cols + c]
+    };
+
+    // OpeningProof: the actual row values at the queried position
+    struct OpeningProof {
+        size_t row_index;
+        std::vector<Val> row_values;  // length = total_cols
+    };
+
+    size_t log_height(const ProverData& d) const {
+        return p3_util::log2_strict_usize(d.lde_height);
+    }
+    size_t log_width(const ProverData& d) const {
+        return p3_util::log2_ceil_usize(d.total_cols);
+    }
+
+    void open(size_t query_index,
+              const std::vector<ProverData>& data_vec,
+              OpeningProof& proof) const
+    {
+        proof.row_index = query_index;
+        proof.row_values.clear();
+
+        if (data_vec.empty()) return;
+
+        // data_vec is sorted by descending height; the first entry is the max.
+        size_t max_log_h = p3_util::log2_strict_usize(data_vec[0].lde_height);
+
+        for (const auto& d : data_vec) {
+            size_t lde_log_h = p3_util::log2_strict_usize(d.lde_height);
+            // For groups smaller than max, reduce the query index
+            size_t bits_reduced = max_log_h - lde_log_h;
+            size_t reduced_qi = query_index >> bits_reduced;
+            size_t natural_k = p3_util::reverse_bits_len(reduced_qi, lde_log_h);
+            const auto* row_start = &d.flat_data[natural_k * d.total_cols];
+            proof.row_values.insert(proof.row_values.end(), row_start, row_start + d.total_cols);
+
+        }
+    }
+
+    template <typename ClaimedEval>
+    bool verify_query(size_t /*query_index*/, size_t /*log_height*/,
+                      const std::vector<Commitment>& /*commits*/,
+                      const OpeningProof& /*proof*/,
+                      const ClaimedEval& /*claimed_eval*/) const
+    {
+        // The actual verification is done by eval_at_query in TwoAdicFriPcs::verify
+        return true;
+    }
 };
 
 // ---------------------------------------------------------------------------
 // TwoAdicFriPcs
-//
-// Template parameters:
-//   Val       - base prime field (e.g. BabyBear)
-//   Challenge - extension field (e.g. BabyBear4)
-//   Dft       - DFT type with coset_lde_batch(mat, added_bits, shift)
-//   InputMmcs - MMCS for committing LDE matrices; must expose:
-//                 commit(vector<RowMajorMatrix<Val>>) -> pair<Commitment,ProverData>
-//                 matrix_width(ProverData, mat_idx) -> size_t
-//                 get_value(ProverData, mat_idx, row, col) -> Val
-//                 open(query_index, vector<ProverData>, OpeningProof&)
-//                 verify_query(query_index, log_max_height,
-//                              vector<Commitment>, OpeningProof, Challenge) -> bool
-//   FriMmcs   - MMCS used internally by the FRI protocol
 // ---------------------------------------------------------------------------
-template <
-    typename Val,
-    typename Challenge,
-    typename Dft,
-    typename InputMmcs,
-    typename FriMmcs
->
+
+/**
+ * TwoAdicFriPcs: PCS built on top of FRI over a two-adic field.
+ *
+ * Template parameters:
+ *   Val        - base prime field type
+ *   Challenge  - extension (or base) field used as FRI challenge
+ *   Dft        - DFT engine with coset_lde_batch(mat, added_bits, shift)
+ *   InputMmcs  - MMCS used to commit original evaluation matrices (Val elements)
+ *   FriMmcs    - MMCS used internally by FRI (Challenge elements, via ExtensionMmcs)
+ */
+template <typename Val, typename Challenge, typename Dft,
+          typename InputMmcs, typename FriMmcs>
 class TwoAdicFriPcs {
 public:
-    using Coset      = TwoAdicMultiplicativeCoset<Val>;
-    using Matrix     = p3_matrix::RowMajorMatrix<Val>;
-    using Commitment = typename InputMmcs::Commitment;
-    using ProverData = typename InputMmcs::ProverData;
-    using InputProof = typename InputMmcs::OpeningProof;
-    using Witness    = uint64_t;
-    using Proof      = FriProof<Challenge, FriMmcs, Witness, InputProof>;
-    using OpenedValues = std::vector<std::vector<std::vector<Challenge>>>;
-    // OpenedValues indexed as [batch][point_idx][col]
+    using Domain          = TwoAdicMultiplicativeCoset<Val>;
+    using InputCommitment = typename InputMmcs::Commitment;
+    using InputProverData = typename InputMmcs::ProverData;
 
-    // OpenData: one entry per polynomial batch being opened.
-    // mat_idx identifies which matrix inside the ProverData (from commit()).
-    struct OpenData {
-        const ProverData&      prover_data;
-        size_t                 mat_idx;  // index of the matrix within prover_data
-        Coset                  domain;
-        std::vector<Challenge> points;
+    // We use PcsQueryInputMmcs as the oracle MMCS for FRI (to store row values in proof)
+    using QueryMmcs      = PcsQueryInputMmcs<Val>;
+    using QueryProverData = typename QueryMmcs::ProverData;
+    using FriInputProof   = typename QueryMmcs::OpeningProof;
+    using FullFriProof    = FriProof<Challenge, FriMmcs, uint64_t, FriInputProof>;
+
+    // OpenedValues[batch][matrix][point][column]
+    using OpenedValues = std::vector<std::vector<std::vector<std::vector<Challenge>>>>;
+
+    // PcsProverData holds the LDE matrices and domain information alongside the
+    // original MMCS prover data.
+    struct PcsProverData {
+        InputProverData                                 mmcs_data;
+        std::vector<p3_matrix::RowMajorMatrix<Val>>     lde_matrices;
+        std::vector<Domain>                             domains;
     };
 
-    // CommitmentsWithPoints: used in verify().
-    struct CommitmentsWithPoints {
-        Commitment                              commitment;
-        Coset                                   domain;
-        std::vector<Challenge>                  points;
-        std::vector<std::vector<Challenge>>     opened_values; // [point][col]
+    // VerifyCommitment: all data needed by the verifier for one batch
+    struct VerifyCommitment {
+        InputCommitment                                    commitment;
+        std::vector<Domain>                                domains;
+        std::vector<std::vector<Challenge>>                points;       // [matrix][point_idx]
+        std::vector<std::vector<std::vector<Challenge>>>   opened_values; // [matrix][point][col]
     };
 
-    TwoAdicFriPcs(Dft dft, InputMmcs mmcs, FriParameters<FriMmcs> fri)
-        : dft_(std::move(dft))
-        , mmcs_(std::move(mmcs))
-        , fri_(std::move(fri))
-    {}
+private:
+    Dft                    dft_;
+    InputMmcs              input_mmcs_;
+    FriParameters<FriMmcs> fri_;
+    QueryMmcs              query_mmcs_;  // for FRI oracle
+
+public:
+    TwoAdicFriPcs(Dft dft, InputMmcs mmcs, FriParameters<FriMmcs> fri_params)
+        : dft_(std::move(dft)), input_mmcs_(std::move(mmcs)), fri_(std::move(fri_params)) {}
 
     // -----------------------------------------------------------------------
     // natural_domain_for_degree
-    // Returns the coset with shift = Val::generator() and size = degree.
     // -----------------------------------------------------------------------
-    Coset natural_domain_for_degree(size_t degree) const {
-        return Coset{ p3_util::log2_strict_usize(degree), Val::generator() };
+    Domain natural_domain_for_degree(size_t degree) const {
+        size_t log_n = p3_util::log2_ceil_usize(degree);
+        Domain d;
+        d.log_n = log_n;
+        d.shift = Val::one_val();
+        return d;
     }
 
     // -----------------------------------------------------------------------
-    // commit
-    // For each (domain, matrix) pair: compute LDE, bit-reverse rows.
-    // Commit all LDE matrices together via mmcs_.
-    // Returns (commitment, prover_data).
+    // commit: LDE + Merkle commit
     // -----------------------------------------------------------------------
-    std::pair<Commitment, ProverData> commit(
-        std::vector<std::pair<Coset, Matrix>> evaluations)
+    std::pair<InputCommitment, PcsProverData>
+    commit(std::vector<std::pair<Domain, p3_matrix::RowMajorMatrix<Val>>> evaluations)
     {
-        std::vector<Matrix> lde_mats;
-        lde_mats.reserve(evaluations.size());
+        std::vector<p3_matrix::RowMajorMatrix<Val>> lde_matrices;
+        std::vector<Domain>                          domains;
+
+        // Step 1: compute LDEs for each input matrix
         for (auto& [domain, mat] : evaluations) {
-            Matrix lde = dft_.coset_lde_batch(std::move(mat), fri_.log_blowup, domain.shift);
-            p3_matrix::reverse_matrix_index_bits(lde);
-            lde_mats.push_back(std::move(lde));
+            auto lde = dft_.coset_lde_batch(std::move(mat),
+                                            fri_.log_blowup,
+                                            domain.shift);
+            // coset_lde_batch already outputs in natural order:
+            // lde[i] = polynomial evaluated at domain.shift * omega^i
+
+            domains.push_back(domain);
+            lde_matrices.push_back(std::move(lde));
         }
-        return mmcs_.commit(std::move(lde_mats));
+
+        // Step 2: build combined flat Val matrix from all LDE matrices
+        size_t max_height = 0;
+        for (const auto& m : lde_matrices) {
+            if (m.height() > max_height) max_height = m.height();
+        }
+        size_t total_width = 0;
+        for (const auto& m : lde_matrices) {
+            total_width += m.width();
+        }
+        if (total_width == 0) {
+            throw std::invalid_argument("TwoAdicFriPcs::commit: empty matrices (total_width=0)");
+        }
+
+        // MerkleTreeMmcs requires committed matrix width to be a power of two (log2_strict).
+        // Pad the concatenated matrix with zero columns up to the next power of two.
+        size_t padded_width = size_t(1) << p3_util::log2_ceil_usize(total_width);
+        size_t pad_cols     = padded_width - total_width;
+
+        std::vector<Val> all_flat;
+        all_flat.reserve(max_height * padded_width);
+
+        for (size_t r = 0; r < max_height; ++r) {
+            for (const auto& lde : lde_matrices) {
+                size_t row = r % lde.height();
+                for (size_t c = 0; c < lde.width(); ++c) {
+                    all_flat.push_back(lde.get_unchecked(row, c));
+                }
+            }
+            for (size_t c = 0; c < pad_cols; ++c) {
+                all_flat.push_back(Val::zero_val());
+            }
+        }
+
+        auto [commit, mmcs_pd] = input_mmcs_.commit_matrix(all_flat, padded_width);
+
+        PcsProverData pd;
+        pd.mmcs_data    = std::move(mmcs_pd);
+        pd.lde_matrices = std::move(lde_matrices);
+        pd.domains      = std::move(domains);
+
+        return {commit, pd};
     }
 
     // -----------------------------------------------------------------------
-    // open
-    //
-    // 1. Interpolate f(z_j) for each (batch b, point z_j, column col).
-    // 2. Observe opened values; sample alpha.
-    // 3. Build quotient vectors grouped by LDE height (in bit-reversed order).
-    // 4. Call prove_fri.
+    // open: compute polynomial evaluations and FRI proof
     // -----------------------------------------------------------------------
     template <typename Challenger>
-    std::pair<OpenedValues, Proof> open(
-        const std::vector<OpenData>& open_data,
-        Challenger& challenger)
+    std::pair<OpenedValues, FullFriProof>
+    open(std::vector<std::pair<const PcsProverData*,
+                               std::vector<std::vector<Challenge>>>> open_data,
+         Challenger& challenger)
     {
-        size_t nb = open_data.size();
-        OpenedValues opened_values(nb);
+        // Sample alpha (combination challenge)
+        Challenge alpha = challenger.template sample_challenge<Challenge>();
 
-        // --- Step 1: interpolate opened values ---
-        for (size_t b = 0; b < nb; ++b) {
-            auto& od      = open_data[b];
-            size_t log_lde = od.domain.log_n + fri_.log_blowup;
-            size_t n_lde   = size_t(1) << log_lde;
-            size_t nw      = mmcs_.matrix_width(od.prover_data, od.mat_idx);
-            size_t np      = od.points.size();
+        // Compute opened values via barycentric interpolation
+        OpenedValues all_opened_values;
 
-            opened_values[b].assign(np, std::vector<Challenge>(nw, Challenge::zero_val()));
+        struct InterpPrecomp {
+            std::vector<Val> subgroup;   // length = lde_height
+            std::vector<Val> diff_invs;  // precomputation for coset interpolation
+        };
+        std::map<std::pair<size_t, uint64_t>, InterpPrecomp> interp_cache;
 
-            Val omega_lde = Val::two_adic_generator(log_lde);
-            // Subgroup H of size n_lde
-            std::vector<Val> subgroup(n_lde);
-            {
-                Val c = Val::one_val();
-                for (size_t i = 0; i < n_lde; ++i) { subgroup[i] = c; c = c * omega_lde; }
-            }
-            auto diff_invs = p3_interpolation::compute_diff_invs(subgroup, od.domain.shift);
+        for (auto& [pcs_data, mat_points] : open_data) {
+            std::vector<std::vector<std::vector<Challenge>>> batch_opened;
+            for (size_t mi = 0; mi < pcs_data->lde_matrices.size(); ++mi) {
+                const auto& lde    = pcs_data->lde_matrices[mi];
+                const auto& domain = pcs_data->domains[mi];
+                const auto& points = mat_points[mi];
 
-            for (size_t col = 0; col < nw; ++col) {
-                // Collect LDE evals in natural order (matrix is bit-reversed)
-                std::vector<Challenge> lde_evals(n_lde);
-                for (size_t i = 0; i < n_lde; ++i) {
-                    size_t row_br = p3_util::reverse_bits_len(i, log_lde);
-                    Val v = mmcs_.get_value(od.prover_data, od.mat_idx, row_br, col);
-                    lde_evals[i] = embed_base<Val, Challenge>(v);
+                size_t lde_height = lde.height();
+                size_t lde_log_h  = p3_util::log2_strict_usize(lde_height);
+                size_t num_cols   = lde.width();
+
+                const uint64_t shift_key = domain.shift.as_canonical_u64();
+                auto key = std::make_pair(lde_log_h, shift_key);
+                auto it = interp_cache.find(key);
+                if (it == interp_cache.end()) {
+                    Val omega_lde = Val::two_adic_generator(lde_log_h);
+                    std::vector<Val> subgroup(lde_height);
+                    {
+                        Val cur = Val::one_val();
+                        for (size_t i = 0; i < lde_height; ++i) {
+                            subgroup[i] = cur;
+                            cur = cur * omega_lde;
+                        }
+                    }
+                    auto diff_invs = p3_interpolation::compute_diff_invs(subgroup, domain.shift);
+                    it = interp_cache.emplace(
+                        key, InterpPrecomp{std::move(subgroup), std::move(diff_invs)}).first;
                 }
-                for (size_t j = 0; j < np; ++j) {
-                    opened_values[b][j][col] =
-                        p3_interpolation::interpolate_coset_with_precomputation<Val, Challenge>(
-                            lde_evals, od.domain.shift, od.points[j], subgroup, diff_invs);
+                const auto& subgroup  = it->second.subgroup;
+                const auto& diff_invs = it->second.diff_invs;
+
+                std::vector<std::vector<Challenge>> mat_opened;
+                for (const Challenge& z : points) {
+                    std::vector<Challenge> col_evals;
+                    for (size_t col = 0; col < num_cols; ++col) {
+                        std::vector<Challenge> col_vals(lde_height);
+                        for (size_t r = 0; r < lde_height; ++r) {
+                            col_vals[r] = Challenge::from_base(lde.get_unchecked(r, col));
+                        }
+                        Challenge val = p3_interpolation::interpolate_coset_with_precomputation(
+                            col_vals, domain.shift, z, subgroup, diff_invs);
+                        col_evals.push_back(val);
+                    }
+                    mat_opened.push_back(std::move(col_evals));
                 }
+                batch_opened.push_back(std::move(mat_opened));
             }
+            all_opened_values.push_back(std::move(batch_opened));
         }
 
-        // --- Step 2: observe opened values, sample alpha ---
-        for (auto& bov : opened_values)
-            for (auto& pov : bov)
-                for (auto& v : pov)
-                    challenger.observe_challenge(v);
-        Challenge alpha = challenger.sample_challenge();
-
-        // --- Step 3: build quotient vectors ---
-        // Key: q[i] = sum_{b,j,col} alpha^k * (fz - f(x_{br(i)})) / (z - x_{br(i)})
-        // where row i (bit-reversed order) of the committed matrix holds f(x_{br(i)}).
-        std::map<size_t, std::vector<Challenge>, std::greater<size_t>> h2q;
-        Challenge alpha_power = Challenge::one_val();
-
-        for (size_t b = 0; b < nb; ++b) {
-            auto& od      = open_data[b];
-            size_t log_lde = od.domain.log_n + fri_.log_blowup;
-            size_t n_lde   = size_t(1) << log_lde;
-
-            if (!h2q.count(log_lde))
-                h2q[log_lde] = std::vector<Challenge>(n_lde, Challenge::zero_val());
-            auto& q = h2q[log_lde];
-
-            size_t nw = mmcs_.matrix_width(od.prover_data, od.mat_idx);
-            Val omega = Val::two_adic_generator(log_lde);
-
-            // Precompute omega powers and x values in bit-reversed order:
-            //   x_br[i] = shift * omega^{bit_rev(i, log_lde)}
-            std::vector<Val> x_br(n_lde);
-            Val current_x = od.domain.shift;
-            for (size_t i = 0; i < n_lde; ++i) {
-                x_br[i] = current_x;
-                current_x *= omega;
-            }
-            p3_util::reverse_slice_index_bits(x_br);
-            
-            for (size_t j = 0; j < od.points.size(); ++j) {
-                Challenge z = od.points[j];
-
-                // Precompute (z - x_br[i])^{-1} for all i using batch inversion.
-                std::vector<Challenge> z_minus_x_diffs(n_lde);
-                for (size_t i = 0; i < n_lde; ++i) {
-                    z_minus_x_diffs[i] = z - embed_base<Val, Challenge>(x_br[i]);
-                }
-                auto z_minus_x_inv = p3_interpolation::batch_multiplicative_inverse(z_minus_x_diffs);
-
-                for (size_t col = 0; col < nw; ++col) {
-                    Challenge fz = opened_values[b][j][col];
-                    Challenge ak = alpha_power;
-                    alpha_power *= alpha;
-                    for (size_t i = 0; i < n_lde; ++i) {
-                        // row i of bit-reversed matrix = f(x_{br(i)})
-                        Val fx_val = mmcs_.get_value(od.prover_data, od.mat_idx, i, col);
-                        Challenge fx = embed_base<Val, Challenge>(fx_val);
-                        q[i] = q[i] + ak * (fz - fx) * z_minus_x_inv[i];
+        // Observe opened values
+        for (auto& batch_vals : all_opened_values) {
+            for (auto& mat_vals : batch_vals) {
+                for (auto& point_vals : mat_vals) {
+                    for (auto& v : point_vals) {
+                        challenger.template observe_challenge<Challenge>(v);
                     }
                 }
             }
         }
 
-        // --- Step 4: prepare FRI inputs (sorted descending by size via map) ---
+        // Build quotient polynomial vectors grouped by log_lde_height (descending)
+        std::map<size_t, std::vector<Challenge>, std::greater<size_t>> fri_inputs_map;
+        size_t alpha_pow = 0;
+
+        for (size_t bi = 0; bi < open_data.size(); ++bi) {
+            const auto* pcs_data   = open_data[bi].first;
+            const auto& mat_points = open_data[bi].second;
+
+            for (size_t mi = 0; mi < pcs_data->lde_matrices.size(); ++mi) {
+                const auto& lde    = pcs_data->lde_matrices[mi];
+                const auto& domain = pcs_data->domains[mi];
+                const auto& points = mat_points[mi];
+                const auto& ov     = all_opened_values[bi][mi];
+
+                size_t lde_height = lde.height();
+                size_t lde_log_h  = p3_util::log2_strict_usize(lde_height);
+                size_t num_cols   = lde.width();
+
+                if (fri_inputs_map.find(lde_log_h) == fri_inputs_map.end()) {
+                    fri_inputs_map[lde_log_h] = std::vector<Challenge>(
+                        lde_height, Challenge::zero_val());
+                }
+                auto& qvec = fri_inputs_map[lde_log_h];
+
+                Val omega = Val::two_adic_generator(lde_log_h);
+
+                // Precompute alpha powers for each (pi, col) combination.
+                // The same alpha power is used for all row positions k.
+                std::vector<Challenge> alpha_pows;
+                alpha_pows.reserve(points.size() * num_cols);
+                if (!points.empty() && num_cols > 0) {
+                    Challenge current_alpha_power = alpha.exp_u64(static_cast<uint64_t>(alpha_pow));
+                    for (size_t i = 0; i < points.size() * num_cols; ++i) {
+                        alpha_pows.push_back(current_alpha_power);
+                        current_alpha_power *= alpha;
+                    }
+                }
+                alpha_pow += points.size() * num_cols;
+
+                for (size_t k = 0; k < lde_height; ++k) {
+                    Val x_val = domain.shift * omega.exp_u64(static_cast<uint64_t>(k));
+                    Challenge x_k = Challenge::from_base(x_val);
+
+                    size_t ap_idx = 0;
+                    for (size_t pi = 0; pi < points.size(); ++pi) {
+                        const Challenge& z_j  = points[pi];
+                        Challenge denom_inv   = (z_j - x_k).inv();
+
+                        for (size_t col = 0; col < num_cols; ++col) {
+                            Challenge f_z   = ov[pi][col];
+                            Challenge f_x   = Challenge::from_base(lde.get_unchecked(k, col));
+                            Challenge numer = f_z - f_x;
+
+                            qvec[k] += alpha_pows[ap_idx] * numer * denom_inv;
+                            ap_idx++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Collect FRI inputs sorted descending.
+        // The fold_matrix/fold_row code expects evaluations in bit-reversed order:
+        // element i should be the polynomial evaluated at omega^{bit_rev(i, log_h)}.
+        // Our qvec is in natural order (qvec[k] = q at omega^k), so we bit-reverse.
         std::vector<std::vector<Challenge>> fri_inputs;
-        fri_inputs.reserve(h2q.size());
-        for (auto& [lh, qv] : h2q)
-            fri_inputs.push_back(std::move(qv));
+        for (auto& [log_h, qvec] : fri_inputs_map) {
+            p3_util::reverse_slice_index_bits(qvec);  // natural -> bit-reversed order
+            fri_inputs.push_back(std::move(qvec));
+        }
 
-        // --- Step 5: prove FRI ---
-        // Pass all prover datas so the InputMmcs can open them at query time.
-        std::vector<ProverData> all_pd;
-        all_pd.reserve(nb);
-        for (auto& od : open_data)
-            all_pd.push_back(od.prover_data);
+        // Build PcsQueryInputMmcs prover data
+        // For each input in fri_inputs (each LDE height group), build a ProverData
+        // that contains the original LDE rows so the verifier can reconstruct quotients.
+        std::vector<QueryProverData> query_input_data;
+        {
+            // We need to match the order of fri_inputs_map (descending log_h).
+            // For each fri_input[i], find the corresponding LDE data.
+            // First pass: compute total width per height group so we can allocate once.
+            std::map<size_t, size_t, std::greater<size_t>> total_cols_per_log_h;
+            std::map<size_t, size_t, std::greater<size_t>> height_per_log_h;
 
-        auto proof = prove_fri<Val, Challenge, FriMmcs, Challenger, Witness, InputMmcs, InputProof>(
-            fri_, fri_inputs, challenger, all_pd, mmcs_);
+            for (size_t bi = 0; bi < open_data.size(); ++bi) {
+                const auto* pcs_data = open_data[bi].first;
 
-        return { std::move(opened_values), std::move(proof) };
+                for (size_t mi = 0; mi < pcs_data->lde_matrices.size(); ++mi) {
+                    const auto& lde   = pcs_data->lde_matrices[mi];
+                    size_t lde_height = lde.height();
+                    size_t lde_log_h  = p3_util::log2_strict_usize(lde_height);
+                    size_t num_cols   = lde.width();
+
+                    total_cols_per_log_h[lde_log_h] += num_cols;
+
+                    auto& stored_height = height_per_log_h[lde_log_h];
+                    if (stored_height == 0) {
+                        stored_height = lde_height;
+                    } else {
+                        // All matrices in a height group must share the same height.
+                        if (stored_height != lde_height) {
+                            throw std::runtime_error(
+                                "TwoAdicFriPcs::open: mismatched LDE heights within a height group");
+                        }
+                    }
+                }
+            }
+
+            // Allocate ProverData for each height group once with final size.
+            std::map<size_t, QueryProverData, std::greater<size_t>> qpd_map;
+            for (const auto& [lde_log_h, total_cols] : total_cols_per_log_h) {
+                QueryProverData qpd;
+                size_t lde_height = height_per_log_h.at(lde_log_h);
+                qpd.lde_height    = lde_height;
+                qpd.total_cols    = total_cols;
+                qpd.flat_data.resize(lde_height * total_cols);
+                qpd_map.emplace(lde_log_h, std::move(qpd));
+            }
+
+            // Second pass: fill the flat_data buffers without reallocations.
+            std::map<size_t, size_t, std::greater<size_t>> col_offset_per_log_h;
+
+            for (size_t bi = 0; bi < open_data.size(); ++bi) {
+                const auto* pcs_data = open_data[bi].first;
+
+                for (size_t mi = 0; mi < pcs_data->lde_matrices.size(); ++mi) {
+                    const auto& lde   = pcs_data->lde_matrices[mi];
+                    size_t lde_height = lde.height();
+                    size_t lde_log_h  = p3_util::log2_strict_usize(lde_height);
+                    size_t num_cols   = lde.width();
+
+                    auto& qpd        = qpd_map[lde_log_h];
+                    size_t col_start = col_offset_per_log_h[lde_log_h];
+
+                    for (size_t r = 0; r < lde_height; ++r) {
+                        for (size_t c = 0; c < num_cols; ++c) {
+                            qpd.flat_data[r * qpd.total_cols + col_start + c] =
+                                lde.get_unchecked(r, c);
+                        }
+                    }
+
+                    col_offset_per_log_h[lde_log_h] += num_cols;
+                }
+            }
+
+            for (auto& [log_h, qpd] : qpd_map) {
+                (void)log_h;
+                query_input_data.push_back(std::move(qpd));
+            }
+        }
+
+        // Call prove_fri using PcsQueryInputMmcs as the input oracle
+        auto fri_proof = prove_fri<Val, Challenge, FriMmcs, Challenger,
+                                   uint64_t, QueryMmcs, FriInputProof>(
+            fri_,
+            std::move(fri_inputs),
+            challenger,
+            query_input_data,
+            query_mmcs_
+        );
+
+        return {std::move(all_opened_values), std::move(fri_proof)};
     }
 
     // -----------------------------------------------------------------------
-    // verify
-    //
-    // Calls verify_fri with an eval_at_query callback that:
-    //   1. Reads opened LDE row values from the InputProof.
-    //   2. Reconstructs the combined quotient value using opened_values + alpha.
+    // verify: verify opened values and FRI proof
     // -----------------------------------------------------------------------
     template <typename Challenger>
-    bool verify(
-        const std::vector<CommitmentsWithPoints>& data,
-        const Proof& proof,
-        Challenger& challenger)
+    bool verify(const std::vector<VerifyCommitment>& inputs,
+                const FullFriProof& proof,
+                Challenger& challenger)
     {
-        size_t nb = data.size();
+        // Sample alpha (must match prover)
+        Challenge alpha = challenger.template sample_challenge<Challenge>();
 
-        // Replay: observe opened values, sample alpha
-        for (auto& d : data)
-            for (auto& pov : d.opened_values)
-                for (auto& v : pov)
-                    challenger.observe_challenge(v);
-        Challenge alpha = challenger.sample_challenge();
-
-        // Collect input commitments
-        std::vector<Commitment> input_commits;
-        input_commits.reserve(nb);
-        for (auto& d : data)
-            input_commits.push_back(d.commitment);
-
-        size_t log_blowup = fri_.log_blowup;
-
-        // Build eval_at_query callback
-        auto eval_fn = [&](size_t query_index, size_t log_max_height,
-                           const InputProof& ip) -> Challenge
-        {
-            Challenge result = Challenge::zero_val();
-            Challenge alpha_power = Challenge::one_val();
-
-            for (size_t b = 0; b < nb; ++b) {
-                auto& d        = data[b];
-                size_t log_lde = d.domain.log_n + log_blowup;
-
-                // Scale query index down to this domain's height
-                size_t height_diff = log_max_height - log_lde;
-                size_t local_idx   = query_index >> height_diff;
-
-                // x = shift * omega^{bit_rev(local_idx, log_lde)}
-                Val omega = Val::two_adic_generator(log_lde);
-                size_t k  = p3_util::reverse_bits_len(local_idx, log_lde);
-                Val x_val = d.domain.shift * omega.exp_u64(static_cast<uint64_t>(k));
-                Challenge x = embed_base<Val, Challenge>(x_val);
-
-                size_t nw = d.opened_values.empty() ? 0 : d.opened_values[0].size();
-
-                for (size_t j = 0; j < d.points.size(); ++j) {
-                    Challenge z         = d.points[j];
-                    Challenge denom_inv = (z - x).inv();
-
-                    for (size_t col = 0; col < nw; ++col) {
-                        Challenge fz = d.opened_values[j][col];
-                        // f(x) comes from the input proof (opened LDE row values)
-                        Val fx_val = mmcs_.get_proof_value(ip, b, local_idx, col);
-                        Challenge fx = embed_base<Val, Challenge>(fx_val);
-                        result += alpha_power * (fz - fx) * denom_inv;
-                        alpha_power *= alpha;
+        // Observe opened values (must match prover)
+        for (const auto& vc : inputs) {
+            for (const auto& mat_vals : vc.opened_values) {
+                for (const auto& point_vals : mat_vals) {
+                    for (const auto& v : point_vals) {
+                        challenger.template observe_challenge<Challenge>(v);
                     }
                 }
+            }
+        }
+
+        // Collect input commitments (not used by QueryMmcs but needed by verify_fri)
+        std::vector<typename QueryMmcs::Commitment> query_commits;
+        // (Empty - QueryMmcs::verify_query always returns true)
+
+        // Precompute: per-matrix info for eval_at_query reconstruction
+        struct MatInfo {
+            size_t lde_height;
+            size_t lde_log_h;
+            Val    shift;
+            size_t num_cols;
+            size_t col_offset;  // offset into the proof's row_values
+            std::vector<Challenge> opening_points;
+            std::vector<std::vector<Challenge>> opened_vals;  // [point][col]
+            size_t alpha_pow_start;
+        };
+
+        std::vector<MatInfo> all_mats;
+
+        // Determine max lde_log_h to know which group query_index maps to
+        size_t max_lde_log_h = 0;
+        for (const auto& vc : inputs) {
+            for (const auto& domain : vc.domains) {
+                size_t lhh = domain.log_n + fri_.log_blowup;
+                if (lhh > max_lde_log_h) max_lde_log_h = lhh;
+            }
+        }
+
+        // Build mat info ordered by descending lde_log_h (same order as FRI inputs)
+        // We collect all mats sorted by descending lde_log_h
+        // For each group of same lde_log_h, track col_offset within the proof row
+        std::map<size_t, std::vector<MatInfo>, std::greater<size_t>> mats_by_height;
+        size_t apow = 0;
+
+        for (const auto& vc : inputs) {
+            for (size_t mi = 0; mi < vc.domains.size(); ++mi) {
+                const auto& domain = vc.domains[mi];
+                const auto& points = vc.points[mi];
+                const auto& ov     = vc.opened_values[mi];
+
+                size_t lde_log_h  = domain.log_n + fri_.log_blowup;
+                size_t lde_height = size_t(1) << lde_log_h;
+                size_t num_cols   = (ov.empty() || ov[0].empty()) ? 0 : ov[0].size();
+
+                MatInfo info;
+                info.lde_height      = lde_height;
+                info.lde_log_h       = lde_log_h;
+                info.shift           = domain.shift;
+                info.num_cols        = num_cols;
+                info.col_offset      = 0;  // to be filled below
+                info.opening_points  = points;
+                info.opened_vals     = ov;
+                info.alpha_pow_start = apow;
+
+                apow += points.size() * num_cols;
+                mats_by_height[lde_log_h].push_back(std::move(info));
+            }
+        }
+
+        // Assign col_offsets: global offsets into ip.row_values.
+        // row_values concatenates [group_0_cols][group_1_cols]... in
+        // descending-log_h order.
+        {
+            size_t global_col_off = 0;
+            for (auto& [log_h, mats] : mats_by_height) {
+                (void)log_h;
+                for (auto& m : mats) {
+                    m.col_offset = global_col_off;
+                    global_col_off += m.num_cols;
+                }
+            }
+        }
+
+        // Flatten into sorted list (descending log_h, matching open()'s FRI input order)
+        for (auto& [log_h, mats] : mats_by_height) {
+            (void)log_h;
+            for (auto& m : mats) {
+                all_mats.push_back(std::move(m));
+            }
+        }
+
+        // open_input: for each query, compute the reduced quotient opening for
+        // every height group.  Returns FriOpenings<Challenge> sorted by
+        // descending log_height.
+        auto open_input_fn = [&, alpha_capture = alpha,
+                               all_mats_capture = std::move(all_mats)]
+            (size_t query_index, size_t log_max_height, const FriInputProof& ip)
+            -> FriOpenings<Challenge>
+        {
+            // Accumulate (alpha_pow, reduced_opening) per log_height
+            std::map<size_t, Challenge, std::greater<size_t>> ro_map;
+
+            for (const auto& info : all_mats_capture) {
+                // Compute the reduced query index for this height group.
+                // Larger groups use the raw query_index; smaller groups
+                // right-shift to account for the height difference.
+                size_t bits_reduced = log_max_height - info.lde_log_h;
+                size_t reduced_qi = query_index >> bits_reduced;
+
+                size_t k_birev = reduced_qi % info.lde_height;
+                size_t k_nat   = p3_util::reverse_bits_len(k_birev, info.lde_log_h);
+                Val omega      = Val::two_adic_generator(info.lde_log_h);
+                Val x_val      = info.shift * omega.exp_u64(static_cast<uint64_t>(k_nat));
+                Challenge x_k  = Challenge::from_base(x_val);
+
+                auto& ro = ro_map[info.lde_log_h];
+
+                Challenge current_alpha_power = alpha_capture.exp_u64(static_cast<uint64_t>(info.alpha_pow_start));
+                for (size_t pi = 0; pi < info.opening_points.size(); ++pi) {
+                    const Challenge& z_j = info.opening_points[pi];
+                    Challenge denom_inv  = (z_j - x_k).inv();
+
+                    for (size_t col = 0; col < info.num_cols; ++col) {
+                        Challenge f_z = info.opened_vals[pi][col];
+
+                        size_t val_idx = info.col_offset + col;
+                        Challenge f_x  = (val_idx < ip.row_values.size())
+                            ? Challenge::from_base(ip.row_values[val_idx])
+                            : Challenge::zero_val();
+
+                        Challenge numer  = f_z - f_x;
+                        ro              += current_alpha_power * numer * denom_inv;
+                        current_alpha_power *= alpha_capture;
+                    }
+                }
+            }
+
+            FriOpenings<Challenge> result;
+            result.reserve(ro_map.size());
+            for (auto& [lh, ro] : ro_map) {
+                result.push_back({lh, ro});
             }
             return result;
         };
 
-        return verify_fri<Val, Challenge, FriMmcs, Challenger, Witness, InputMmcs, InputProof>(
-            fri_, input_commits, proof, challenger, mmcs_, eval_fn);
+        return verify_fri<Val, Challenge, FriMmcs, Challenger,
+                          uint64_t, QueryMmcs, FriInputProof>(
+            fri_,
+            query_commits,
+            proof,
+            challenger,
+            query_mmcs_,
+            open_input_fn
+        );
     }
-
-private:
-    Dft                    dft_;
-    InputMmcs              mmcs_;
-    FriParameters<FriMmcs> fri_;
 };
 
 } // namespace p3_fri

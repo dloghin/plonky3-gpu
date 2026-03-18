@@ -22,6 +22,7 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <type_traits>
 
 using namespace p3_fri;
 using namespace p3_field;
@@ -34,24 +35,17 @@ using BB4 = BabyBear4;
 // PCS mock infrastructure
 // ============================================================================
 
-// Opening proof: for each prover-data item in the FRI input_data list,
-// stores the opened row values [mat_idx=0][col] at the queried row.
-struct PcsOpeningProof {
-    // row_values[pd_idx][col]  (one entry per ProverData in input_data)
-    std::vector<std::vector<BB>> row_values;
-    // The local row index opened for each pd item
-    std::vector<size_t> row_indices;
-};
-
-// A minimal but realistic multi-matrix MMCS for PCS tests.
-// Stores all committed matrices; computes a trivial hash commitment.
+// A minimal MMCS for PCS tests. `TwoAdicFriPcs` only needs `commit_matrix()`
+// for the input MMCS (Merkle commitments are not exercised by these unit tests).
 struct PcsMmcsCommitment {
     uint32_t hash;
     bool operator==(const PcsMmcsCommitment& o) const { return hash == o.hash; }
 };
 
 struct PcsMmcsProverData {
-    std::shared_ptr<std::vector<p3_matrix::RowMajorMatrix<BB>>> matrices;
+    std::vector<BB> flat;
+    size_t height = 0;
+    size_t width  = 0;
 };
 
 // FRI commit-phase MMCS (BB4 Challenge elements, single-matrix commit_matrix interface)
@@ -120,76 +114,22 @@ struct FriMockMmcs {
 struct PcsInputMmcs {
     using Commitment   = PcsMmcsCommitment;
     using ProverData   = PcsMmcsProverData;
-    using OpeningProof = PcsOpeningProof;
-
-    // Commit multiple base-field matrices
-    std::pair<Commitment, ProverData> commit(
-        std::vector<p3_matrix::RowMajorMatrix<BB>> matrices) const
-    {
-        uint64_t acc = 0;
-        for (auto& m : matrices)
-            for (const auto& v : m.values)
-                acc = (acc + v.as_canonical_u64()) % BB::PRIME;
-        Commitment c{ static_cast<uint32_t>(acc) };
-        ProverData d{ std::make_shared<std::vector<p3_matrix::RowMajorMatrix<BB>>>(std::move(matrices)) };
-        return { c, d };
-    }
-
-    // Width of matrix mat_idx inside the ProverData
-    size_t matrix_width(const ProverData& pd, size_t mat_idx) const {
-        return pd.matrices->at(mat_idx).width();
-    }
-
-    BB get_value(const ProverData& pd, size_t mat_idx, size_t row, size_t col) const {
-        return pd.matrices->at(mat_idx).get_unchecked(row, col);
-    }
-
-    // Get an element from an OpeningProof (called in verify's eval_at_query).
-    // pd_idx = index into the ProverData list passed to open().
-    BB get_proof_value(const OpeningProof& proof, size_t pd_idx,
-                       size_t /*local_row*/, size_t col) const {
-        return proof.row_values.at(pd_idx).at(col);
-    }
-
-    // Called by prove_fri at query time.
-    // For each ProverData in `pds`, open the correct row (based on query_index
-    // and the matrix height) and store values in the proof.
-    void open(size_t query_index,
-              const std::vector<ProverData>& pds,
-              OpeningProof& proof) const
-    {
-        proof.row_values.clear();
-        proof.row_indices.clear();
-
-        size_t log_max_height = 0;
-        for (const auto& pd : pds) {
-            size_t h = pd.matrices->at(0).height();
-            size_t lh = p3_util::log2_strict_usize(h);
-            if (lh > log_max_height) log_max_height = lh;
-        }
-
-        for (const auto& pd : pds) {
-            const auto& mat = pd.matrices->at(0);
-            size_t h = mat.height();
-            size_t log_h = p3_util::log2_strict_usize(h);
-            size_t height_diff = log_max_height - log_h;
-            size_t row = query_index >> height_diff;
-            size_t w   = mat.width();
-            std::vector<BB> row_vals(w);
-            for (size_t c = 0; c < w; ++c)
-                row_vals[c] = mat.get_unchecked(row, c);
-            proof.row_values.push_back(std::move(row_vals));
-            proof.row_indices.push_back(row);
-        }
-    }
-
-    // Called by verify_fri: verify the Merkle opening.  Mock: always accept.
-    bool verify_query(size_t /*query_index*/, size_t /*log_max_height*/,
-                      const std::vector<Commitment>& /*commits*/,
-                      const OpeningProof& /*proof*/,
-                      const BB4& /*folded*/) const { return true; }
 
     void observe_commitment(const Commitment& /*commit*/) const {}
+
+    std::pair<Commitment, ProverData> commit_matrix(
+        const std::vector<BB>& vals, size_t width) const
+    {
+        uint64_t acc = 0;
+        for (const auto& v : vals)
+            acc = (acc + v.as_canonical_u64()) % BB::PRIME;
+        Commitment c{ static_cast<uint32_t>(acc) };
+        ProverData d;
+        d.flat   = vals;
+        d.width  = width;
+        d.height = (width == 0) ? 0 : (vals.size() / width);
+        return { c, d };
+    }
 };
 
 // ============================================================================
@@ -219,13 +159,19 @@ public:
         mix_with_val(c.hash);
     }
 
-    BB4 sample_challenge() {
+    BB4 sample_challenge_bb4() {
         mix();
         uint32_t v0 = static_cast<uint32_t>(counter       % BB::PRIME);
         uint32_t v1 = static_cast<uint32_t>((counter >> 8) % BB::PRIME);
         uint32_t v2 = static_cast<uint32_t>((counter >>16) % BB::PRIME);
         uint32_t v3 = static_cast<uint32_t>((counter >>24) % BB::PRIME);
         return BB4({ BB(v0), BB(v1), BB(v2), BB(v3) });
+    }
+
+    template <typename EF = BB4>
+    EF sample_challenge() {
+        static_assert(std::is_same_v<EF, BB4>, "PcsChallenger only supports BB4 challenges");
+        return sample_challenge_bb4();
     }
 
     size_t sample_bits(size_t bits) {
@@ -237,10 +183,16 @@ public:
     uint64_t grind(size_t) { return 0; }
     bool check_witness(size_t, uint64_t) { return true; }
 
-    void observe_challenge(const BB4& c) {
+    void observe_challenge_bb4(const BB4& c) {
         for (size_t k = 0; k < 4; ++k) {
             mix_with_val(c[k].as_canonical_u64());
         }
+    }
+
+    template <typename EF>
+    void observe_challenge(const EF& c) {
+        static_assert(std::is_same_v<EF, BB4>, "PcsChallenger only supports BB4 challenges");
+        observe_challenge_bb4(c);
     }
 
     void observe_arity(size_t la) { counter += la; }
@@ -272,7 +224,7 @@ TEST(TwoAdicFriPcs, NaturalDomainForDegree) {
 
     auto coset = pcs.natural_domain_for_degree(8);
     EXPECT_EQ(coset.log_n, 3u);
-    EXPECT_EQ(coset.shift, BB::generator());
+    EXPECT_EQ(coset.shift, BB::one_val());
 
     auto coset2 = pcs.natural_domain_for_degree(4);
     EXPECT_EQ(coset2.log_n, 2u);
@@ -299,7 +251,7 @@ TEST(TwoAdicFriPcs, CommitProducesCorrectLDE) {
     size_t log_n = 3;  // domain size = 8
     size_t n     = size_t(1) << log_n;
 
-    MyPcs::Coset domain{ log_n, BB::generator() };
+    MyPcs::Domain domain{ log_n, BB::one_val() };
 
     // Simple polynomial: f(x) = 1 for all x (constant polynomial)
     p3_matrix::RowMajorMatrix<BB> eval_mat(n, 1, BB::one_val());
@@ -307,13 +259,14 @@ TEST(TwoAdicFriPcs, CommitProducesCorrectLDE) {
     auto [commit, pd] = pcs.commit({{ domain, eval_mat }});
 
     // The LDE should have height = n * blowup = 16
-    EXPECT_EQ(pd.matrices->size(), 1u);
-    EXPECT_EQ((*pd.matrices)[0].height(), n * 2);  // blowup = 2
-    EXPECT_EQ((*pd.matrices)[0].width(), 1u);
+    (void)commit;
+    ASSERT_EQ(pd.lde_matrices.size(), 1u);
+    EXPECT_EQ(pd.lde_matrices[0].height(), n * 2);  // blowup = 2
+    EXPECT_EQ(pd.lde_matrices[0].width(), 1u);
 
     // All LDE values of a constant polynomial are 1
-    for (size_t i = 0; i < (*pd.matrices)[0].height(); ++i)
-        EXPECT_EQ((*pd.matrices)[0].get_unchecked(i, 0), BB::one_val());
+    for (size_t i = 0; i < pd.lde_matrices[0].height(); ++i)
+        EXPECT_EQ(pd.lde_matrices[0].get_unchecked(i, 0), BB::one_val());
 }
 
 // ============================================================================
@@ -338,7 +291,7 @@ TEST(TwoAdicFriPcs, OpenVerifyRoundTrip) {
     // but here we just treat them as LDE evaluations on a coset)
     size_t log_n = 2;
     size_t n     = size_t(1) << log_n;
-    MyPcs::Coset domain{ log_n, BB::generator() };
+    MyPcs::Domain domain{ log_n, BB::one_val() };
 
     std::vector<BB> evals_data(n);
     for (size_t i = 0; i < n; ++i)
@@ -352,25 +305,25 @@ TEST(TwoAdicFriPcs, OpenVerifyRoundTrip) {
     // Prepare open data: open at one extension-field point
     BB4 z({ BB(5u), BB(3u), BB(1u), BB(0u) });
 
-    MyPcs::OpenData od{ pd, 0, domain, { z } };
-
     PcsChallenger prover_challenger;
-    auto [opened_vals, proof] = pcs.open({ od }, prover_challenger);
+    std::vector<std::vector<BB4>> mat_points = { { z } };
+    auto [opened_vals, proof] = pcs.open({ { &pd, mat_points } }, prover_challenger);
 
     // opened_vals[batch=0][point=0][col=0] is f(z)
     ASSERT_EQ(opened_vals.size(), 1u);
-    ASSERT_EQ(opened_vals[0].size(), 1u);
-    ASSERT_EQ(opened_vals[0][0].size(), 1u);
+    ASSERT_EQ(opened_vals[0].size(), 1u);      // 1 matrix
+    ASSERT_EQ(opened_vals[0][0].size(), 1u);   // 1 point
+    ASSERT_EQ(opened_vals[0][0][0].size(), 1u); // 1 column
 
     // Verify
-    MyPcs::CommitmentsWithPoints cwp;
-    cwp.commitment    = commit;
-    cwp.domain        = domain;
-    cwp.points        = { z };
-    cwp.opened_values = opened_vals[0];  // [point][col]
+    MyPcs::VerifyCommitment vc;
+    vc.commitment    = commit;
+    vc.domains       = { domain };
+    vc.points        = { { z } };
+    vc.opened_values = { opened_vals[0][0] };  // [matrix][point][col]
 
     PcsChallenger verifier_challenger;  // fresh, same initial state
-    bool ok = pcs.verify({ cwp }, proof, verifier_challenger);
+    bool ok = pcs.verify({ vc }, proof, verifier_challenger);
     EXPECT_TRUE(ok);
 }
 
@@ -394,7 +347,7 @@ TEST(TwoAdicFriPcs, VerifyRejectsTamperedOpenedValues) {
 
     size_t log_n = 2;
     size_t n     = size_t(1) << log_n;
-    MyPcs::Coset domain{ log_n, BB::generator() };
+    MyPcs::Domain domain{ log_n, BB::one_val() };
 
     std::vector<BB> evals_data(n);
     for (size_t i = 0; i < n; ++i)
@@ -405,23 +358,22 @@ TEST(TwoAdicFriPcs, VerifyRejectsTamperedOpenedValues) {
 
     BB4 z({ BB(7u), BB(2u), BB(0u), BB(1u) });
 
-    MyPcs::OpenData od{ pd, 0, domain, { z } };
-
     PcsChallenger prover_challenger;
-    auto [opened_vals, proof] = pcs.open({ od }, prover_challenger);
+    std::vector<std::vector<BB4>> mat_points = { { z } };
+    auto [opened_vals, proof] = pcs.open({ { &pd, mat_points } }, prover_challenger);
 
     // Tamper: change the opened value
-    auto tampered_vals = opened_vals[0];
-    tampered_vals[0][0] = tampered_vals[0][0] + BB4::one_val();  // add 1
+    auto tampered_vals = opened_vals;
+    tampered_vals[0][0][0][0] = tampered_vals[0][0][0][0] + BB4::one_val();  // add 1
 
-    MyPcs::CommitmentsWithPoints cwp;
-    cwp.commitment    = commit;
-    cwp.domain        = domain;
-    cwp.points        = { z };
-    cwp.opened_values = tampered_vals;
+    MyPcs::VerifyCommitment vc;
+    vc.commitment    = commit;
+    vc.domains       = { domain };
+    vc.points        = { { z } };
+    vc.opened_values = { tampered_vals[0][0] };
 
     PcsChallenger verifier_challenger;
-    bool ok = pcs.verify({ cwp }, proof, verifier_challenger);
+    bool ok = pcs.verify({ vc }, proof, verifier_challenger);
     // With tampered values the quotient won't match FRI
     EXPECT_FALSE(ok);
 }
@@ -447,7 +399,7 @@ TEST(TwoAdicFriPcs, MultiColumnRoundTrip) {
     size_t log_n = 2;
     size_t n     = size_t(1) << log_n;
     size_t w     = 2;
-    MyPcs::Coset domain{ log_n, BB::generator() };
+    MyPcs::Domain domain{ log_n, BB::one_val() };
 
     // Two polynomials: f0 = [1,2,3,4], f1 = [5,6,7,8]
     std::vector<BB> evals_data(n * w);
@@ -461,21 +413,20 @@ TEST(TwoAdicFriPcs, MultiColumnRoundTrip) {
 
     BB4 z({ BB(3u), BB(1u), BB(0u), BB(0u) });
 
-    MyPcs::OpenData od{ pd, 0, domain, { z } };
-
     PcsChallenger prover_challenger;
-    auto [opened_vals, proof] = pcs.open({ od }, prover_challenger);
+    std::vector<std::vector<BB4>> mat_points = { { z } };
+    auto [opened_vals, proof] = pcs.open({ { &pd, mat_points } }, prover_challenger);
 
-    ASSERT_EQ(opened_vals[0][0].size(), 2u);
+    ASSERT_EQ(opened_vals[0][0][0].size(), 2u);
 
-    MyPcs::CommitmentsWithPoints cwp;
-    cwp.commitment    = commit;
-    cwp.domain        = domain;
-    cwp.points        = { z };
-    cwp.opened_values = opened_vals[0];
+    MyPcs::VerifyCommitment vc;
+    vc.commitment    = commit;
+    vc.domains       = { domain };
+    vc.points        = { { z } };
+    vc.opened_values = { opened_vals[0][0] };
 
     PcsChallenger verifier_challenger;
-    bool ok = pcs.verify({ cwp }, proof, verifier_challenger);
+    bool ok = pcs.verify({ vc }, proof, verifier_challenger);
     EXPECT_TRUE(ok);
 }
 
@@ -499,7 +450,7 @@ TEST(TwoAdicFriPcs, TwoOpeningPointsRoundTrip) {
 
     size_t log_n = 2;
     size_t n     = size_t(1) << log_n;
-    MyPcs::Coset domain{ log_n, BB::generator() };
+    MyPcs::Domain domain{ log_n, BB::one_val() };
 
     std::vector<BB> evals_data(n);
     for (size_t i = 0; i < n; ++i)
@@ -511,20 +462,19 @@ TEST(TwoAdicFriPcs, TwoOpeningPointsRoundTrip) {
     BB4 z1({ BB(2u), BB(1u), BB(0u), BB(0u) });
     BB4 z2({ BB(9u), BB(0u), BB(1u), BB(0u) });
 
-    MyPcs::OpenData od{ pd, 0, domain, { z1, z2 } };
-
     PcsChallenger prover_challenger;
-    auto [opened_vals, proof] = pcs.open({ od }, prover_challenger);
+    std::vector<std::vector<BB4>> mat_points = { { z1, z2 } };
+    auto [opened_vals, proof] = pcs.open({ { &pd, mat_points } }, prover_challenger);
 
-    ASSERT_EQ(opened_vals[0].size(), 2u);
+    ASSERT_EQ(opened_vals[0][0].size(), 2u);
 
-    MyPcs::CommitmentsWithPoints cwp;
-    cwp.commitment    = commit;
-    cwp.domain        = domain;
-    cwp.points        = { z1, z2 };
-    cwp.opened_values = opened_vals[0];
+    MyPcs::VerifyCommitment vc;
+    vc.commitment    = commit;
+    vc.domains       = { domain };
+    vc.points        = { { z1, z2 } };
+    vc.opened_values = { opened_vals[0][0] };
 
     PcsChallenger verifier_challenger;
-    bool ok = pcs.verify({ cwp }, proof, verifier_challenger);
+    bool ok = pcs.verify({ vc }, proof, verifier_challenger);
     EXPECT_TRUE(ok);
 }

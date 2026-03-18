@@ -241,8 +241,10 @@ public:
             uint64_t val = elem.as_canonical_u64();
             uint64_t mask = (bits == 64) ? ~uint64_t(0) : ((uint64_t(1) << bits) - 1u);
             if ((val & mask) == 0u) {
-                // Accept: record witness in real challenger
+                // Accept: record witness in real challenger and consume
+                // the verification sample (so state matches check_witness)
                 observe_witness(witness);
+                sample();  // consume one output element, matching check_witness behavior
                 return witness;
             }
         }

@@ -62,9 +62,7 @@ public:
         val_data.reserve(height * val_width);
 
         for (const EF& elem : data) {
-            for (size_t d = 0; d < DEGREE; ++d) {
-                val_data.push_back(elem.coeffs[d]);
-            }
+            val_data.insert(val_data.end(), elem.coeffs.begin(), elem.coeffs.end());
         }
 
         auto [commit, inner_pd] = inner_mmcs.commit_matrix(val_data, val_width);
@@ -121,9 +119,7 @@ public:
         std::vector<Val> val_row;
         val_row.reserve(row_vals.size() * DEGREE);
         for (const EF& elem : row_vals) {
-            for (size_t d = 0; d < DEGREE; ++d) {
-                val_row.push_back(elem.coeffs[d]);
-            }
+            val_row.insert(val_row.end(), elem.coeffs.begin(), elem.coeffs.end());
         }
         return inner_mmcs.verify_row(commit, row_index, val_row, proof);
     }

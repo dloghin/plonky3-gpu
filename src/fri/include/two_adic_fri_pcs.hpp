@@ -377,12 +377,14 @@ public:
                 // The same alpha power is used for all row positions k.
                 std::vector<Challenge> alpha_pows;
                 alpha_pows.reserve(points.size() * num_cols);
-                for (size_t pi = 0; pi < points.size(); ++pi) {
-                    for (size_t col = 0; col < num_cols; ++col) {
-                        alpha_pows.push_back(alpha.exp_u64(static_cast<uint64_t>(alpha_pow)));
-                        alpha_pow++;
+                if (!points.empty() && num_cols > 0) {
+                    Challenge current_alpha_power = alpha.exp_u64(static_cast<uint64_t>(alpha_pow));
+                    for (size_t i = 0; i < points.size() * num_cols; ++i) {
+                        alpha_pows.push_back(current_alpha_power);
+                        current_alpha_power *= alpha;
                     }
                 }
+                alpha_pow += points.size() * num_cols;
 
                 for (size_t k = 0; k < lde_height; ++k) {
                     Val x_val = domain.shift * omega.exp_u64(static_cast<uint64_t>(k));
@@ -635,6 +637,7 @@ public:
 
                 auto& ro = ro_map[info.lde_log_h];
 
+                Challenge current_alpha_power = alpha_capture.exp_u64(static_cast<uint64_t>(info.alpha_pow_start));
                 for (size_t pi = 0; pi < info.opening_points.size(); ++pi) {
                     const Challenge& z_j = info.opening_points[pi];
                     Challenge denom_inv  = (z_j - x_k).inv();
@@ -648,9 +651,8 @@ public:
                             : Challenge::zero_val();
 
                         Challenge numer  = f_z - f_x;
-                        size_t pow       = info.alpha_pow_start + pi * info.num_cols + col;
-                        Challenge apow_v = alpha_capture.exp_u64(static_cast<uint64_t>(pow));
-                        ro              += apow_v * numer * denom_inv;
+                        ro              += current_alpha_power * numer * denom_inv;
+                        current_alpha_power *= alpha_capture;
                     }
                 }
             }

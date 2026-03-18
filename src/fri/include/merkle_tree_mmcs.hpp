@@ -113,11 +113,8 @@ public:
     }
 
     std::vector<InputF> get_row_as_vals(const ProverData& d, size_t row) const {
-        std::vector<InputF> result(d.width);
-        for (size_t c = 0; c < d.width; ++c) {
-            result[c] = d.flat_data[row * d.width + c];
-        }
-        return result;
+        const auto* row_start = &d.flat_data[row * d.width];
+        return std::vector<InputF>(row_start, row_start + d.width);
     }
 
     // get_row is an alias used by the FRI prover (rows are Digest-typed since the

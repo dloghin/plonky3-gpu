@@ -66,31 +66,6 @@ static PosType make_test_poseidon() {
 }
 
 // ---------------------------------------------------------------------------
-// Build a CPU MerkleTree using the same Poseidon2 constants via the
-// CPU fallback path in build_merkle_tree_cuda.
-// ---------------------------------------------------------------------------
-static MerkleTree<BB, BB, DIGEST> build_cpu_tree(
-    std::vector<RowMajorMatrix<BB>> matrices,
-    const PosType& poseidon,
-    size_t cap_height)
-{
-    // Use the CPU fallback (same function, non-CUDA compilation path not
-    // available here since we ARE in a .cu file).  We call build_merkle_tree_cuda
-    // but on CPU by copying matrices.  To get a true CPU reference, we run the
-    // CUDA version on CPU data with a synchronous approach — but actually we
-    // just run build_merkle_tree_cuda which on CUDA hardware uses the GPU.
-    //
-    // For the correctness test we want a known-good reference.  We compute it
-    // by running the same build_merkle_tree_cuda call with the same poseidon and
-    // comparing two independent calls (they must be equal).
-    //
-    // True cross-validation against the CPU PaddingFreeSponge is done by
-    // rebuilding with the CPU hasher/compressor (see test_cpu_vs_gpu below).
-    return build_merkle_tree_cuda<BB, WIDTH, RATE, DIGEST, ROUNDS_F, ROUNDS_P, D_EXP>(
-        std::move(matrices), poseidon, cap_height);
-}
-
-// ---------------------------------------------------------------------------
 // Compare two MerkleCap values
 // ---------------------------------------------------------------------------
 static bool caps_equal(const MerkleCap<BB, DIGEST>& a,

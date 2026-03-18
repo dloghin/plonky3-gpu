@@ -194,17 +194,14 @@ public:
 
             // Precompute omega powers and x values in bit-reversed order:
             //   x_br[i] = shift * omega^{bit_rev(i, log_lde)}
-            std::vector<Val> omega_powers(n_lde);
-            omega_powers[0] = Val::one_val();
-            for (size_t i = 1; i < n_lde; ++i) {
-                omega_powers[i] = omega_powers[i - 1] * omega;
-            }
             std::vector<Val> x_br(n_lde);
+            Val current_x = od.domain.shift;
             for (size_t i = 0; i < n_lde; ++i) {
-                size_t k = p3_util::reverse_bits_len(i, log_lde);
-                x_br[i] = od.domain.shift * omega_powers[k];
+                x_br[i] = current_x;
+                current_x *= omega;
             }
-
+            p3_util::reverse_slice_index_bits(x_br);
+            
             for (size_t j = 0; j < od.points.size(); ++j) {
                 Challenge z = od.points[j];
 

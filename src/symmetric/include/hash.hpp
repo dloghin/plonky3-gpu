@@ -25,13 +25,17 @@ using Hash = std::array<F, N>;
  * @brief Concept: CryptographicHasher<F, OUT_ARRAY>
  *
  * A type satisfying this concept must provide:
+ *   - hash_iter(const F* data, size_t len) -> OUT_ARRAY
  *   - hash_iter(const std::vector<F>&) -> OUT_ARRAY
  *   - hash_iter_slices(const std::vector<std::vector<F>>&) -> OUT_ARRAY
+ *
+ * The pointer+size overload enables hashing contiguous sub-ranges (e.g. matrix
+ * rows stored in flat buffers) without copying into a temporary std::vector.
  *
  * Used by Merkle tree leaf hashing.  OUT_ARRAY is typically std::array<F, OUT>.
  */
 // Note: C++17 does not have "requires" so we document the concept as a comment.
-// Implementors should provide both hash_iter and hash_iter_slices methods.
+// Implementors should provide hash_iter (both overloads) and hash_iter_slices.
 
 /**
  * @brief Concept: PseudoCompressionFunction<T, N>

@@ -21,7 +21,7 @@ namespace p3_merkle {
  * Template parameters:
  *   InputF  - field element type for matrix rows
  *   DigestF - field element type for hash digests (usually same as InputF)
- *   H       - hasher with Hash<DigestF,CHUNK> hash_iter(const std::vector<InputF>&)
+ *   H       - hasher with Hash<DigestF,CHUNK> hash_iter(const InputF*, size_t)
  *   C       - compressor with Hash<DigestF,CHUNK> compress(std::array<Hash<DigestF,CHUNK>,2>)
  *   N_ARY   - arity (must be 2 for binary tree)
  *   CHUNK   - digest size in field elements
@@ -67,9 +67,7 @@ public:
         // Compute leaf hashes
         std::vector<Digest> leaves(height);
         for (size_t i = 0; i < height; ++i) {
-            std::vector<InputF> row(data.begin() + static_cast<ptrdiff_t>(i * width),
-                                    data.begin() + static_cast<ptrdiff_t>((i + 1) * width));
-            leaves[i] = hasher.hash_iter(row);
+            leaves[i] = hasher.hash_iter(data.data() + i * width, width);
         }
 
         // Build tree bottom-up

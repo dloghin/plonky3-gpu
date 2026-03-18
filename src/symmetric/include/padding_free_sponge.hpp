@@ -60,14 +60,14 @@ public:
      * @param input  All field elements to hash (any length, including 0).
      * @return       Digest of OUT field elements.
      */
-    Hash<F, OUT> hash_iter(const std::vector<F>& input) const {
+    Hash<F, OUT> hash_iter(const F* data, size_t len) const {
         std::array<F, WIDTH> state{};
         size_t input_pos = 0;
 
         for (;;) {
             size_t i = 0;
-            for (; i < RATE && input_pos < input.size(); ++i, ++input_pos) {
-                state[i] = input[input_pos];
+            for (; i < RATE && input_pos < len; ++i, ++input_pos) {
+                state[i] = data[input_pos];
             }
             if (i == RATE) {
                 permutation_.permute_mut(state);
@@ -84,6 +84,10 @@ public:
             digest[i] = state[i];
         }
         return digest;
+    }
+
+    Hash<F, OUT> hash_iter(const std::vector<F>& input) const {
+        return hash_iter(input.data(), input.size());
     }
 
     /**

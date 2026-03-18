@@ -28,7 +28,7 @@ struct FriProof {
     std::vector<Witness> commit_pow_witnesses;
     std::vector<QueryProof<Challenge, FriMmcs, InputProof>> query_proofs;
     std::vector<Challenge> final_poly;  // Coefficients of final polynomial
-    Witness query_pow_witness;
+    Witness query_pow_witness{};
 };
 
 } // namespace p3_fri

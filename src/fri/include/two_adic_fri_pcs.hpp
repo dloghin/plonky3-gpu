@@ -613,8 +613,7 @@ public:
         // every height group.  Returns FriOpenings<Challenge> sorted by
         // descending log_height.
         auto open_input_fn = [&, alpha_capture = alpha,
-                               all_mats_capture = std::move(all_mats),
-                               max_lde_log_h_capture = max_lde_log_h]
+                               all_mats_capture = std::move(all_mats)]
             (size_t query_index, size_t log_max_height, const FriInputProof& ip)
             -> FriOpenings<Challenge>
         {

@@ -56,7 +56,7 @@ FriProof<Challenge, FriMmcs, Witness, InputProof> prove_fri(
 
     // The smallest input must be strictly larger than the final domain height
     // so that at least one folding round is possible (matching Rust's assert).
-    if (params.log_final_poly_len > 0) {
+    {
         size_t log_min_height = p3_util::log2_strict_usize(inputs.back().size());
         size_t log_final_h = params.log_final_height();
         if (log_min_height <= log_final_h) {

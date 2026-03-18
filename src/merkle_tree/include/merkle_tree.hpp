@@ -149,7 +149,8 @@ MerkleTree<F, W, DIGEST_ELEMS> build_merkle_tree(
     while (level_size > cap_size) {
         level_size /= 2; // binary tree: each level halves
 
-        std::vector<std::array<W, DIGEST_ELEMS>> next_layer(level_size);
+        tree.digest_layers.emplace_back(level_size);
+        auto& next_layer = tree.digest_layers.back();
 
         // Compress pairs from the previous layer.
         for (size_t i = 0; i < level_size; ++i) {
@@ -174,8 +175,7 @@ MerkleTree<F, W, DIGEST_ELEMS> build_merkle_tree(
             }
         }
 
-        tree.digest_layers.push_back(next_layer);
-        current_layer = std::move(next_layer);
+        current_layer = next_layer;
     }
 
     // Store leaf matrices.

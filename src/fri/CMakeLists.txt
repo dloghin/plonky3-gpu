@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(BUILD_TESTS "Build unit tests" ON)
+option(BUILD_CUDA_EXAMPLES "Build CUDA FRI fold example" ON)
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 
 if(ENABLE_WARNINGS)
@@ -33,6 +34,54 @@ target_include_directories(fri INTERFACE
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+# -----------------------------------------------------------------------
+# CUDA FRI fold example (optional, only if CUDA compiler is available)
+# -----------------------------------------------------------------------
+if(BUILD_CUDA_EXAMPLES)
+    include(CheckLanguage)
+    check_language(CUDA)
+    if(CMAKE_CUDA_COMPILER)
+        message(STATUS "CUDA compiler found: ${CMAKE_CUDA_COMPILER}")
+        enable_language(CUDA)
+
+        set(CMAKE_CUDA_STANDARD 17)
+        set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+        if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+            set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89;90")
+        endif()
+
+        set(FRI_FOLD_CUDA_INCLUDE_DIRS
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/../field/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/../matrix/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/../util/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/../cuda/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/../interpolation/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/../dft/include
+        )
+
+        add_executable(fri_fold_cuda_example src/fri_fold_cuda.cu)
+        target_include_directories(fri_fold_cuda_example
+            PRIVATE ${FRI_FOLD_CUDA_INCLUDE_DIRS}
+        )
+        # BabyBear4 uses std::array-backed coeff storage; NVCC needs relaxed constexpr
+        # to allow device code to call some constexpr stdlib accessors.
+        target_compile_options(fri_fold_cuda_example
+            PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+        )
+        set_target_properties(fri_fold_cuda_example
+            PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+            CUDA_SEPARABLE_COMPILATION ON
+        )
+
+        message(STATUS "CUDA FRI fold example enabled")
+    else()
+        message(STATUS "CUDA compiler not found, skipping CUDA FRI fold example")
+    endif()
 endif()
 
 # Installation

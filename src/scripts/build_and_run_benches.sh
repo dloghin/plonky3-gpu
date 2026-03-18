@@ -27,6 +27,10 @@ echo ""
 
 if [ -f bench_field ]; then
     ./bench_field
+    ./transpose_benchmark
+    ./columnwise_dot_product
 elif [ -f benches/bench_field ]; then
     ./benches/bench_field
+    ./benches/transpose_benchmark
+    ./benches/columnwise_dot_product
 fi

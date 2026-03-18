@@ -230,9 +230,17 @@ public:
         for (const auto& m : lde_matrices) {
             total_width += m.width();
         }
+        if (total_width == 0) {
+            throw std::invalid_argument("TwoAdicFriPcs::commit: empty matrices (total_width=0)");
+        }
+
+        // MerkleTreeMmcs requires committed matrix width to be a power of two (log2_strict).
+        // Pad the concatenated matrix with zero columns up to the next power of two.
+        size_t padded_width = size_t(1) << p3_util::log2_ceil_usize(total_width);
+        size_t pad_cols     = padded_width - total_width;
 
         std::vector<Val> all_flat;
-        all_flat.reserve(max_height * total_width);
+        all_flat.reserve(max_height * padded_width);
 
         for (size_t r = 0; r < max_height; ++r) {
             for (const auto& lde : lde_matrices) {
@@ -241,9 +249,12 @@ public:
                     all_flat.push_back(lde.get_unchecked(row, c));
                 }
             }
+            for (size_t c = 0; c < pad_cols; ++c) {
+                all_flat.push_back(Val::zero_val());
+            }
         }
 
-        auto [commit, mmcs_pd] = input_mmcs_.commit_matrix(all_flat, total_width);
+        auto [commit, mmcs_pd] = input_mmcs_.commit_matrix(all_flat, padded_width);
 
         PcsProverData pd;
         pd.mmcs_data    = std::move(mmcs_pd);

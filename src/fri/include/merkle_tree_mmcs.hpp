@@ -152,7 +152,7 @@ public:
                     const OpeningProof& proof) const
     {
         // Hash the leaf
-        Digest cur_hash = hasher.hash_iter(row_vals);
+        Digest cur_hash = hasher.hash_iter(row_vals.data(), row_vals.size());
         size_t cur_idx = row_index;
 
         for (const Digest& sibling : proof) {

@@ -343,7 +343,7 @@ TEST(DuplexChallenger, GrindAndCheckWitness) {
         ch_check.observe(BabyBear(0u));
     }
 
-    constexpr size_t BITS = 4;  // require 4 leading zero bits -> ~1/16 chance per try
+    constexpr size_t BITS = 4;  // require 4 trailing zero bits -> ~1/16 chance per try
     uint64_t witness = ch_grind.grind(BITS);
 
     // The same witness must be accepted by ch_check
@@ -369,15 +369,12 @@ TEST(DuplexChallenger, CheckWitnessRejectsInvalid) {
     ch.observe(BabyBear(1u));
     for (int i = 0; i < 7; ++i) ch.observe(BabyBear(0u));
 
-    // check_witness with a deliberately wrong witness: 999999
-    // and only 1 bit required (50% chance of pass); run a stronger check.
+    // check_witness with a deliberately wrong witness: 0xDEAD
     // For determinism, use 20 bits -> probability of accidental pass < 2^-20.
     constexpr size_t BITS = 20;
-    // witness=0xDEAD is almost certainly invalid for BITS=20
     bool accepted = ch.check_witness(BITS, 0xDEADu);
-    // We cannot guarantee a reject without running the actual permutation, so
-    // we merely verify the call completes and returns a bool.
-    (void)accepted;
+    EXPECT_FALSE(accepted)
+        << "check_witness should reject an arbitrary witness with high probability";
 }
 
 // ---------------------------------------------------------------------------

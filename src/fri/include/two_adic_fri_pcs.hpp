@@ -69,7 +69,7 @@ public:
     // OpenData: one entry per polynomial batch being opened.
     // mat_idx identifies which matrix inside the ProverData (from commit()).
     struct OpenData {
-        ProverData             prover_data;
+        const ProverData&      prover_data;
         size_t                 mat_idx;  // index of the matrix within prover_data
         Coset                  domain;
         std::vector<Challenge> points;

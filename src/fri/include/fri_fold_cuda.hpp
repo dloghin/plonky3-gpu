@@ -164,12 +164,9 @@ __global__ void fri_fold_kernel(
     // Build evaluation nodes t[j] = x * w^j (j=0..arity-1).
     EF t[MAX_ARITY];
     {
+        EF x_ef = EF::from_base(x_val);
         F w_pow = F::one_val();
         for (size_t j = 0; j < arity; ++j) {
-            // Use scalar multiply: EF::from_base(x_val) * w^j expressed as x_val * w_pow
-            // We embed x_val and multiply by the scalar w_pow.
-            // EF element representing x_val (embed base field element):
-            EF x_ef = EF::from_base(x_val);
             t[j] = x_ef * w_pow;          // EF * F (scalar mult)
             w_pow = w_pow * w_val;
         }

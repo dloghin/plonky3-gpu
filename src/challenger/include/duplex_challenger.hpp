@@ -232,6 +232,7 @@ public:
      *        - If low `bits` bits are zero → observe witness in real state, return.
      */
     uint64_t grind(size_t bits) {
+        assert(bits < F::FIELD_BITS && "PoW bits must be less than FIELD_BITS");
         DuplexChallenger saved = *this;
         for (uint64_t witness = 0; ; ++witness) {
             DuplexChallenger attempt = saved;

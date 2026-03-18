@@ -1,0 +1,1 @@
+set(P3_GPU_PROJECT_VERSION "1.0.0")

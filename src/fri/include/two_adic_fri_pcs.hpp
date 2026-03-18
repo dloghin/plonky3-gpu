@@ -94,7 +94,7 @@ struct PcsQueryInputMmcs {
         return p3_util::log2_strict_usize(d.lde_height);
     }
     size_t log_width(const ProverData& d) const {
-        return p3_util::log2_strict_usize(d.total_cols);
+        return p3_util::log2_ceil_usize(d.total_cols);
     }
 
     void open(size_t query_index,

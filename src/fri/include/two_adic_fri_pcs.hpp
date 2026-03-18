@@ -126,7 +126,7 @@ public:
     // -----------------------------------------------------------------------
     template <typename Challenger>
     std::pair<OpenedValues, Proof> open(
-        std::vector<OpenData> open_data,
+        const std::vector<OpenData>& open_data,
         Challenger& challenger)
     {
         size_t nb = open_data.size();

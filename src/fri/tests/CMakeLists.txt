@@ -20,6 +20,7 @@ endif()
 # Test executable
 add_executable(fri_tests
     test_fri.cpp
+    fri_test.cpp
 )
 
 target_link_libraries(fri_tests
@@ -34,6 +35,11 @@ target_include_directories(fri_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../matrix/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../util/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../cuda/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../poseidon2/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../symmetric/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../challenger/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../dft/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../interpolation/include
 )
 
 # Discover tests

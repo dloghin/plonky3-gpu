@@ -17,72 +17,48 @@ endif()
 
 include(GoogleTest)
 
-# -- Field tests --
-add_executable(field_two_adic_tests test_two_adic.cpp)
-target_link_libraries(field_two_adic_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(field_two_adic_tests)
+function(add_plonky3_test name)
+    add_executable(${name} ${ARGN})
+    target_link_libraries(${name} PRIVATE plonky3 GTest::gtest_main)
+    gtest_discover_tests(${name})
+endfunction()
 
-add_executable(field_extension_tests test_extension_field.cpp)
-target_link_libraries(field_extension_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(field_extension_tests)
+# -- Field tests --
+add_plonky3_test(field_two_adic_tests test_two_adic.cpp)
+
+add_plonky3_test(field_extension_tests test_extension_field.cpp)
 
 # -- Matrix tests --
-add_executable(matrix_tests test_matrix.cpp)
-target_link_libraries(matrix_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(matrix_tests)
+add_plonky3_test(matrix_tests test_matrix.cpp)
 
-add_executable(dense_matrix_tests test_dense_matrix.cpp)
-target_link_libraries(dense_matrix_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(dense_matrix_tests)
+add_plonky3_test(dense_matrix_tests test_dense_matrix.cpp)
 
-add_executable(matrix_util_tests test_matrix_util.cpp)
-target_link_libraries(matrix_util_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(matrix_util_tests)
+add_plonky3_test(matrix_util_tests test_matrix_util.cpp)
 
 # -- Util tests --
-add_executable(util_tests test_util.cpp)
-target_link_libraries(util_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(util_tests)
+add_plonky3_test(util_tests test_util.cpp)
 
-add_executable(linear_map_tests test_linear_map.cpp)
-target_link_libraries(linear_map_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(linear_map_tests)
+add_plonky3_test(linear_map_tests test_linear_map.cpp)
 
 # -- DFT tests --
-add_executable(dft_tests test_dft.cpp)
-target_link_libraries(dft_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(dft_tests)
+add_plonky3_test(dft_tests test_dft.cpp)
 
-add_executable(ntt_cuda_tests test_ntt_cuda.cpp)
-target_link_libraries(ntt_cuda_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(ntt_cuda_tests)
+add_plonky3_test(ntt_cuda_tests test_ntt_cuda.cpp)
 
 # -- FRI tests --
-add_executable(fri_tests test_fri.cpp fri_test.cpp test_two_adic_fri_pcs.cpp)
-target_link_libraries(fri_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(fri_tests)
+add_plonky3_test(fri_tests test_fri.cpp fri_test.cpp test_two_adic_fri_pcs.cpp)
 
 # -- Merkle tree tests --
-add_executable(merkle_tree_tests test_merkle_tree.cpp)
-target_link_libraries(merkle_tree_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(merkle_tree_tests)
+add_plonky3_test(merkle_tree_tests test_merkle_tree.cpp)
 
 # -- Commit tests --
-add_executable(commit_tests test_commit.cpp)
-target_link_libraries(commit_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(commit_tests)
+add_plonky3_test(commit_tests test_commit.cpp)
 
 # -- Challenger tests --
-add_executable(challenger_tests test_challenger.cpp)
-target_link_libraries(challenger_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(challenger_tests)
+add_plonky3_test(challenger_tests test_challenger.cpp)
 
 # -- Symmetric tests --
-add_executable(symmetric_tests test_symmetric.cpp)
-target_link_libraries(symmetric_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(symmetric_tests)
+add_plonky3_test(symmetric_tests test_symmetric.cpp)
 
 # -- Interpolation tests --
-add_executable(interpolation_tests test_interpolation.cpp)
-target_link_libraries(interpolation_tests PRIVATE plonky3 GTest::gtest_main)
-gtest_discover_tests(interpolation_tests)
+add_plonky3_test(interpolation_tests test_interpolation.cpp)

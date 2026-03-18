@@ -39,85 +39,46 @@ set_target_properties(
 # -- CUDA examples (optional) --
 if(BUILD_CUDA_EXAMPLES AND ENABLE_CUDA AND CMAKE_CUDA_COMPILER)
 
+    function(add_cuda_example name)
+        add_executable(${name} ${name}.cu)
+        target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+        if(ARGN)
+            target_link_libraries(${name} PRIVATE ${ARGN})
+        endif()
+        set_target_properties(${name} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+            CUDA_SEPARABLE_COMPILATION ON
+        )
+    endfunction()
+
     # Field CUDA examples
-    add_executable(goldilocks_cuda_example goldilocks_cuda_example.cu)
-    target_include_directories(goldilocks_cuda_example PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    set_target_properties(goldilocks_cuda_example PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-        CUDA_SEPARABLE_COMPILATION ON
-    )
+    add_cuda_example(goldilocks_cuda_example)
 
-    add_executable(baby_bear_cuda_example baby_bear_cuda_example.cu)
-    target_include_directories(baby_bear_cuda_example PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    set_target_properties(baby_bear_cuda_example PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-        CUDA_SEPARABLE_COMPILATION ON
-    )
+    add_cuda_example(baby_bear_cuda_example)
 
-    add_executable(mersenne31_cuda_example mersenne31_cuda_example.cu)
-    target_include_directories(mersenne31_cuda_example PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    set_target_properties(mersenne31_cuda_example PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-        CUDA_SEPARABLE_COMPILATION ON
-    )
+    add_cuda_example(mersenne31_cuda_example)
 
     # Poseidon2 CUDA examples
-    add_executable(goldilocks_poseidon2_cuda goldilocks_poseidon2_cuda.cu)
-    target_include_directories(goldilocks_poseidon2_cuda PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    set_target_properties(goldilocks_poseidon2_cuda PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-        CUDA_SEPARABLE_COMPILATION ON
-    )
+    add_cuda_example(goldilocks_poseidon2_cuda)
 
-    add_executable(baby_bear_poseidon2_cuda baby_bear_poseidon2_cuda.cu)
-    target_include_directories(baby_bear_poseidon2_cuda PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    set_target_properties(baby_bear_poseidon2_cuda PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-        CUDA_SEPARABLE_COMPILATION ON
-    )
+    add_cuda_example(baby_bear_poseidon2_cuda)
 
-    add_executable(mersenne31_poseidon2_cuda mersenne31_poseidon2_cuda.cu)
-    target_include_directories(mersenne31_poseidon2_cuda PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    set_target_properties(mersenne31_poseidon2_cuda PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-        CUDA_SEPARABLE_COMPILATION ON
-    )
+    add_cuda_example(mersenne31_poseidon2_cuda)
 
     # Matrix CUDA example
-    add_executable(matrix_cuda_example matrix_cuda_example.cu)
-    target_include_directories(matrix_cuda_example PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(matrix_cuda_example PRIVATE matrix_cuda)
-    set_target_properties(matrix_cuda_example PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-        CUDA_SEPARABLE_COMPILATION ON
-    )
+    add_cuda_example(matrix_cuda_example matrix_cuda)
 
     # NTT CUDA example
-    add_executable(ntt_cuda_example ntt_cuda_example.cu)
-    target_include_directories(ntt_cuda_example PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    set_target_properties(ntt_cuda_example PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-        CUDA_SEPARABLE_COMPILATION ON
-    )
+    add_cuda_example(ntt_cuda_example)
 
     # FRI fold CUDA example
-    add_executable(fri_fold_cuda_example fri_fold_cuda_example.cu)
-    target_include_directories(fri_fold_cuda_example PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_cuda_example(fri_fold_cuda_example)
     target_compile_options(fri_fold_cuda_example
         PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
     )
-    set_target_properties(fri_fold_cuda_example PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-        CUDA_SEPARABLE_COMPILATION ON
-    )
 
     # Merkle tree CUDA example
-    add_executable(merkle_tree_cuda_example merkle_tree_cuda_example.cu)
-    target_include_directories(merkle_tree_cuda_example PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    set_target_properties(merkle_tree_cuda_example PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-        CUDA_SEPARABLE_COMPILATION ON
-    )
+    add_cuda_example(merkle_tree_cuda_example)
 
     message(STATUS "CUDA examples enabled")
 else()

@@ -44,7 +44,9 @@ endif()
 
 add_custom_target(run_benchmarks
     COMMAND bench_field
-    DEPENDS bench_field
+    COMMAND transpose_benchmark
+    COMMAND columnwise_dot_product
+    DEPENDS bench_field transpose_benchmark columnwise_dot_product
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Running benchmarks..."
 )

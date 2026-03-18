@@ -20,6 +20,7 @@
 #include "p3_util/util.hpp"
 
 #include <vector>
+#include <memory>
 #include <cstdint>
 
 using namespace p3_fri;
@@ -50,7 +51,7 @@ struct PcsMmcsCommitment {
 };
 
 struct PcsMmcsProverData {
-    std::vector<p3_matrix::RowMajorMatrix<BB>> matrices;
+    std::shared_ptr<std::vector<p3_matrix::RowMajorMatrix<BB>>> matrices;
 };
 
 // FRI commit-phase MMCS (BB4 Challenge elements, single-matrix commit_matrix interface)
@@ -130,18 +131,17 @@ struct PcsInputMmcs {
             for (const auto& v : m.values)
                 acc = (acc + v.as_canonical_u64()) % BB::PRIME;
         Commitment c{ static_cast<uint32_t>(acc) };
-        ProverData d{ std::move(matrices) };
+        ProverData d{ std::make_shared<std::vector<p3_matrix::RowMajorMatrix<BB>>>(std::move(matrices)) };
         return { c, d };
     }
 
     // Width of matrix mat_idx inside the ProverData
     size_t matrix_width(const ProverData& pd, size_t mat_idx) const {
-        return pd.matrices.at(mat_idx).width();
+        return pd.matrices->at(mat_idx).width();
     }
 
-    // Individual element access
     BB get_value(const ProverData& pd, size_t mat_idx, size_t row, size_t col) const {
-        return pd.matrices.at(mat_idx).get_unchecked(row, col);
+        return pd.matrices->at(mat_idx).get_unchecked(row, col);
     }
 
     // Get an element from an OpeningProof (called in verify's eval_at_query).
@@ -163,13 +163,13 @@ struct PcsInputMmcs {
 
         size_t log_max_height = 0;
         for (const auto& pd : pds) {
-            size_t h = pd.matrices.at(0).height();
+            size_t h = pd.matrices->at(0).height();
             size_t lh = p3_util::log2_strict_usize(h);
             if (lh > log_max_height) log_max_height = lh;
         }
 
         for (const auto& pd : pds) {
-            const auto& mat = pd.matrices.at(0);
+            const auto& mat = pd.matrices->at(0);
             size_t h = mat.height();
             size_t log_h = p3_util::log2_strict_usize(h);
             size_t height_diff = log_max_height - log_h;
@@ -307,13 +307,13 @@ TEST(TwoAdicFriPcs, CommitProducesCorrectLDE) {
     auto [commit, pd] = pcs.commit({{ domain, eval_mat }});
 
     // The LDE should have height = n * blowup = 16
-    EXPECT_EQ(pd.matrices.size(), 1u);
-    EXPECT_EQ(pd.matrices[0].height(), n * 2);  // blowup = 2
-    EXPECT_EQ(pd.matrices[0].width(), 1u);
+    EXPECT_EQ(pd.matrices->size(), 1u);
+    EXPECT_EQ((*pd.matrices)[0].height(), n * 2);  // blowup = 2
+    EXPECT_EQ((*pd.matrices)[0].width(), 1u);
 
     // All LDE values of a constant polynomial are 1
-    for (size_t i = 0; i < pd.matrices[0].height(); ++i)
-        EXPECT_EQ(pd.matrices[0].get_unchecked(i, 0), BB::one_val());
+    for (size_t i = 0; i < (*pd.matrices)[0].height(); ++i)
+        EXPECT_EQ((*pd.matrices)[0].get_unchecked(i, 0), BB::one_val());
 }
 
 // ============================================================================

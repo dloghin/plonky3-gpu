@@ -178,7 +178,7 @@ public:
         // Key: q[i] = sum_{b,j,col} alpha^k * (fz - f(x_{br(i)})) / (z - x_{br(i)})
         // where row i (bit-reversed order) of the committed matrix holds f(x_{br(i)}).
         std::map<size_t, std::vector<Challenge>, std::greater<size_t>> h2q;
-        size_t alpha_idx = 0;
+        Challenge alpha_power = Challenge::one_val();
 
         for (size_t b = 0; b < nb; ++b) {
             auto& od      = open_data[b];

@@ -116,9 +116,9 @@ struct PcsQueryInputMmcs {
             size_t bits_reduced = max_log_h - lde_log_h;
             size_t reduced_qi = query_index >> bits_reduced;
             size_t natural_k = p3_util::reverse_bits_len(reduced_qi, lde_log_h);
-            for (size_t c = 0; c < d.total_cols; ++c) {
-                proof.row_values.push_back(d.flat_data[natural_k * d.total_cols + c]);
-            }
+            const auto* row_start = &d.flat_data[natural_k * d.total_cols];
+            proof.row_values.insert(proof.row_values.end(), row_start, row_start + d.total_cols);
+
         }
     }
 

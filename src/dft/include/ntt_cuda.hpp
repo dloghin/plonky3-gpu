@@ -641,13 +641,11 @@ private:
 
         // Copy result back to host; resize mat to new_h rows
         mat.values.resize(total_new);
-        // (width_ is private; use the public constructor trick via std::vector swap)
-        p3_matrix::RowMajorMatrix<F> result(std::move(mat.values), w);
         P3_CUDA_CHECK(cudaDeviceSynchronize());
-        P3_CUDA_CHECK(cudaMemcpy(result.values.data(), d_data, total_new * sizeof(F),
+        P3_CUDA_CHECK(cudaMemcpy(mat.values.data(), d_data, total_new * sizeof(F),
                                  cudaMemcpyDeviceToHost));
         P3_CUDA_CHECK(cudaFree(d_data));
-        return result;
+        return mat;
     }
 
     // ------------------------------------------------------------------

@@ -198,17 +198,29 @@ struct PcsInputMmcs {
 struct PcsChallenger {
     uint64_t counter = 0;
 
+private:
+    static constexpr uint64_t MULT = 6364136223846793005ULL;
+    static constexpr uint64_t INC = 1442695040888963407ULL;
+
+    void mix_with_val(uint64_t val) {
+        counter += val;
+        counter = counter * MULT + INC;
+    }
+
+    void mix() {
+        counter = counter * MULT + INC;
+    }
+
+public:
     void observe_commitment(const PcsMmcsCommitment& c) {
-        counter += c.hash;
-        counter = counter * 6364136223846793005ULL + 1442695040888963407ULL;
+        mix_with_val(c.hash);
     }
     void observe_commitment(const FriMockMmcsCommitment& c) {
-        counter += c.hash;
-        counter = counter * 6364136223846793005ULL + 1442695040888963407ULL;
+        mix_with_val(c.hash);
     }
 
     BB4 sample_challenge() {
-        counter = counter * 6364136223846793005ULL + 1442695040888963407ULL;
+        mix();
         uint32_t v0 = static_cast<uint32_t>(counter       % BB::PRIME);
         uint32_t v1 = static_cast<uint32_t>((counter >> 8) % BB::PRIME);
         uint32_t v2 = static_cast<uint32_t>((counter >>16) % BB::PRIME);
@@ -217,7 +229,7 @@ struct PcsChallenger {
     }
 
     size_t sample_bits(size_t bits) {
-        counter = counter * 6364136223846793005ULL + 1442695040888963407ULL;
+        mix();
         size_t mask = (bits >= 64) ? ~size_t(0) : ((size_t(1) << bits) - 1);
         return static_cast<size_t>(counter & mask);
     }
@@ -227,8 +239,7 @@ struct PcsChallenger {
 
     void observe_challenge(const BB4& c) {
         for (size_t k = 0; k < 4; ++k) {
-            counter += c[k].as_canonical_u64();
-            counter = counter * 6364136223846793005ULL + 1442695040888963407ULL;
+            mix_with_val(c[k].as_canonical_u64());
         }
     }
 

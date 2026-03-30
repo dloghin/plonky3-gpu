@@ -15,23 +15,6 @@ using namespace p3_fri;
 // is represented as a flat vector of length 2*n and fold_matrix takes
 // (log_height, log_arity, beta, current).
 
-static std::mt19937_64 rng_global(12345);
-
-template <typename F>
-static F random_element() {
-    std::uniform_int_distribution<uint32_t> dist(0, F::PRIME - 1);
-    return F(dist(rng_global));
-}
-
-template <typename F, size_t D, uint32_t W>
-static BinomialExtensionField<F, D, W> random_ext_element() {
-    std::array<F, D> coeffs;
-    for (size_t i = 0; i < D; ++i) {
-        coeffs[i] = random_element<F>();
-    }
-    return BinomialExtensionField<F, D, W>(coeffs);
-}
-
 // --------------------------------------------------------------------------
 // BabyBear (F = EF = BabyBear)
 // --------------------------------------------------------------------------
@@ -75,7 +58,11 @@ static void BM_FoldMatrix_BabyBear4(benchmark::State& state) {
     std::mt19937_64 local_rng(n);
     std::uniform_int_distribution<uint32_t> dist(0, BabyBear::PRIME - 1);
 
-    BabyBear4 beta = random_ext_element<BabyBear, 4, 11>();
+    std::array<BabyBear, 4> beta_coeffs;
+    for (auto& c : beta_coeffs) {
+        c = BabyBear(dist(local_rng));
+    }
+    BabyBear4 beta(beta_coeffs);
     std::vector<BabyBear4> mat(2 * n);
     for (auto& v : mat) {
         std::array<BabyBear, 4> coeffs;

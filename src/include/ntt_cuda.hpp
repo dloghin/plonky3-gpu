@@ -279,7 +279,7 @@ public:
             } else if (err == cudaErrorNoDevice || err == cudaErrorInsufficientDriver) {
                 // Graceful runtime fallback: keep GPU path disabled.
                 use_gpu_ = false;
-            } else if (err != cudaSuccess) {
+            } else {
                 throw std::runtime_error(std::string("CUDA error at ") + __FILE__ + ":" +
                     std::to_string(__LINE__) + ": " + cudaGetErrorString(err));
             }

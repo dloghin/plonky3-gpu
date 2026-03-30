@@ -61,12 +61,21 @@ if(ENABLE_CUDA)
     )
 endif()
 
-add_custom_target(run_benchmarks
+set(_bench_commands
     COMMAND bench_field
     COMMAND transpose_benchmark
     COMMAND columnwise_dot_product
     COMMAND bench_fold_even_odd
-    DEPENDS bench_field transpose_benchmark columnwise_dot_product bench_fold_even_odd
+)
+set(_bench_deps bench_field transpose_benchmark columnwise_dot_product bench_fold_even_odd)
+if(ENABLE_CUDA)
+    list(APPEND _bench_commands COMMAND bench_fold_even_odd_cuda)
+    list(APPEND _bench_deps bench_fold_even_odd_cuda)
+endif()
+
+add_custom_target(run_benchmarks
+    ${_bench_commands}
+    DEPENDS ${_bench_deps}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Running benchmarks..."
 )

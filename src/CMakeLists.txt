@@ -24,7 +24,9 @@ if(ENABLE_WARNINGS)
     if(MSVC)
         add_compile_options(/W4)
     else()
-        add_compile_options(-Wall -Wextra -Wpedantic)
+        add_compile_options(-Wall -Wextra)
+        # nvcc's host compile of .cu files uses #line directives that trip -Wpedantic; keep pedantic for C++ only.
+        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wpedantic>)
     endif()
 endif()
 
@@ -47,6 +49,11 @@ if(ENABLE_CUDA)
 
         set(CMAKE_CUDA_STANDARD 17)
         set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+        # Link the shared CUDA runtime (libcudart.so) instead of libcudart_static.a.
+        # Static runtime pulls in -lrt -lpthread -ldl, which CMake also passes to the
+        # nvcc device-link step; nvlink then warns about those host static archives.
+        set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 
         if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
             set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89;90")

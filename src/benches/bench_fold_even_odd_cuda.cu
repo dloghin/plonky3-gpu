@@ -66,7 +66,6 @@ static void BM_FoldMatrixCuda_BabyBear4(benchmark::State& state) {
 
 BENCHMARK(BM_FoldMatrixCuda_BabyBear4)
     ->Args({12})->Args({14})->Args({16})->Args({18})->Args({20})->Args({22})
-    ->Unit(benchmark::kMillisecond)
-    ->Iterations(10);
+    ->Unit(benchmark::kMillisecond);
 
 BENCHMARK_MAIN();

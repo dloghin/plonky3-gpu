@@ -59,13 +59,23 @@
     #include <cuda_runtime.h>
     #include <stdexcept>
     #include <string>
+
+namespace p3_cuda_compat {
+
+/** Throw std::runtime_error if @p e is not cudaSuccess (for use from P3_CUDA_CHECK and call sites). */
+inline void throw_if_cuda_error(cudaError_t e, const char* file, int line) {
+    if (e != cudaSuccess) {
+        throw std::runtime_error(std::string("CUDA error at ") + file + ":" +
+            std::to_string(line) + ": " + cudaGetErrorString(e));
+    }
+}
+
+}  // namespace p3_cuda_compat
+
     #define P3_CUDA_CHECK(call) \
         do { \
-            cudaError_t err = call; \
-            if (err != cudaSuccess) { \
-                throw std::runtime_error(std::string("CUDA error at ") + __FILE__ + ":" + \
-                    std::to_string(__LINE__) + ": " + cudaGetErrorString(err)); \
-            } \
+            cudaError_t p3_cuda_err = (call); \
+            p3_cuda_compat::throw_if_cuda_error(p3_cuda_err, __FILE__, __LINE__); \
         } while(0)
 #else
     // No-op for non-CUDA builds

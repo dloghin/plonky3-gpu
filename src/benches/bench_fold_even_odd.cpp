@@ -59,12 +59,10 @@ static void BM_FoldMatrix(benchmark::State& state) {
 
 BENCHMARK_TEMPLATE(BM_FoldMatrix, BabyBear)
     ->Args({12})->Args({14})->Args({16})->Args({18})->Args({20})->Args({22})
-    ->Unit(benchmark::kMillisecond)
-    ->Iterations(10);
+    ->Unit(benchmark::kMillisecond);
 
 BENCHMARK_TEMPLATE(BM_FoldMatrix, BabyBear4)
     ->Args({12})->Args({14})->Args({16})->Args({18})->Args({20})->Args({22})
-    ->Unit(benchmark::kMillisecond)
-    ->Iterations(10);
+    ->Unit(benchmark::kMillisecond);
 
 BENCHMARK_MAIN();

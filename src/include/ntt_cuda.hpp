@@ -280,8 +280,7 @@ public:
                 // Graceful runtime fallback: keep GPU path disabled.
                 use_gpu_ = false;
             } else {
-                throw std::runtime_error(std::string("CUDA error at ") + __FILE__ + ":" +
-                    std::to_string(__LINE__) + ": " + cudaGetErrorString(err));
+                p3_cuda_compat::throw_if_cuda_error(err, __FILE__, __LINE__);
             }
         }
 #else

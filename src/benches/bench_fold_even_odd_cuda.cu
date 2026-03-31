@@ -2,6 +2,7 @@
 #include "fri_fold_cuda.hpp"
 #include "baby_bear.hpp"
 #include "extension_field.hpp"
+#include <cuda_runtime.h>
 #include <random>
 #include <vector>
 
@@ -9,8 +10,9 @@ using namespace p3_field;
 using namespace p3_fri;
 
 // CUDA counterpart of bench_fold_even_odd.cpp.
-// Benchmarks fold_matrix_cuda which dispatches to GPU kernels when available,
-// falling back to the CPU implementation otherwise.
+// Times only the FRI fold kernels on pre-allocated device buffers (launch +
+// cudaDeviceSynchronize). Host alloc, H2D setup, and D2H teardown are outside
+// the timed region so results reflect folding work, not cudaMalloc/Memcpy/Free.
 //
 // Note: BabyBear-as-challenge (F==EF) is omitted because the CUDA kernels
 // require halve() and from_base() which are only available on extension fields.
@@ -42,14 +44,24 @@ static void BM_FoldMatrixCuda_BabyBear4(benchmark::State& state) {
         v = BabyBear4(coeffs);
     }
 
-    // Warm-up GPU
-    fold_matrix_cuda<BabyBear, BabyBear4>(beta, log_arity, log_height, mat);
+    BabyBear4* d_input = nullptr;
+    BabyBear4* d_output = nullptr;
+    P3_CUDA_CHECK(cudaMalloc(&d_input, mat.size() * sizeof(BabyBear4)));
+    P3_CUDA_CHECK(cudaMalloc(&d_output, n * sizeof(BabyBear4)));
+    P3_CUDA_CHECK(cudaMemcpy(
+        d_input, mat.data(), mat.size() * sizeof(BabyBear4), cudaMemcpyHostToDevice));
+
+    fold_matrix_cuda_device<BabyBear, BabyBear4>(
+        d_input, d_output, beta, log_arity, log_height, n);
 
     for (auto _ : state) {
-        auto result = fold_matrix_cuda<BabyBear, BabyBear4>(
-            beta, log_arity, log_height, mat);
-        benchmark::DoNotOptimize(result.data());
+        fold_matrix_cuda_device<BabyBear, BabyBear4>(
+            d_input, d_output, beta, log_arity, log_height, n);
+        benchmark::DoNotOptimize(d_output);
     }
+
+    P3_CUDA_CHECK(cudaFree(d_input));
+    P3_CUDA_CHECK(cudaFree(d_output));
 }
 
 BENCHMARK(BM_FoldMatrixCuda_BabyBear4)

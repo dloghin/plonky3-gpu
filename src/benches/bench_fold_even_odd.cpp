@@ -53,7 +53,7 @@ static void BM_FoldMatrix(benchmark::State& state) {
     for (auto _ : state) {
         auto result = TwoAdicFriFolding<Val, Challenge>::fold_matrix(
             log_height, log_arity, beta, mat);
-        benchmark::DoNotOptimize(result.data());
+        benchmark::DoNotOptimize(result);
     }
 }
 

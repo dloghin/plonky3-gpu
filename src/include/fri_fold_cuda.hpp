@@ -265,10 +265,11 @@ void fold_matrix_cuda_device(
     } else if (log_arity == 2) {
         fri_fold_kernel<Val, Challenge, 4>
             <<<nblocks, BLOCK_SIZE>>>(d_input, d_output, beta, n, log_height, log_arity);
-    } else {
-        // log_arity == 3
+    } else if (log_arity == 3) {
         fri_fold_kernel<Val, Challenge, 8>
             <<<nblocks, BLOCK_SIZE>>>(d_input, d_output, beta, n, log_height, log_arity);
+    } else {
+        throw std::invalid_argument("log_arity must be 1, 2, or 3");
     }
 
     P3_CUDA_CHECK(cudaGetLastError());

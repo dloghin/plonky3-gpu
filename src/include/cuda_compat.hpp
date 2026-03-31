@@ -59,13 +59,23 @@
     #include <cuda_runtime.h>
     #include <stdexcept>
     #include <string>
+
+namespace p3_cuda_compat {
+
+/** Throw std::runtime_error if @p e is not cudaSuccess (for use from P3_CUDA_CHECK and call sites). */
+inline void throw_if_cuda_error(cudaError_t e, const char* file, int line) {
+    if (e != cudaSuccess) {
+        throw std::runtime_error(std::string("CUDA error at ") + file + ":" +
+            std::to_string(line) + ": " + cudaGetErrorString(e));
+    }
+}
+
+}  // namespace p3_cuda_compat
+
     #define P3_CUDA_CHECK(call) \
         do { \
-            cudaError_t err = call; \
-            if (err != cudaSuccess) { \
-                throw std::runtime_error(std::string("CUDA error at ") + __FILE__ + ":" + \
-                    std::to_string(__LINE__) + ": " + cudaGetErrorString(err)); \
-            } \
+            cudaError_t p3_cuda_err = (call); \
+            p3_cuda_compat::throw_if_cuda_error(p3_cuda_err, __FILE__, __LINE__); \
         } while(0)
 #else
     // No-op for non-CUDA builds
@@ -108,7 +118,10 @@ P3_HOST_DEVICE P3_INLINE uint128_t mul64(uint64_t a, uint64_t b) {
     return uint128_t(hi, lo);
 #else
     // Use compiler's 128-bit type on host
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
     __uint128_t prod = static_cast<__uint128_t>(a) * static_cast<__uint128_t>(b);
+#pragma GCC diagnostic pop
     return uint128_t(static_cast<uint64_t>(prod >> 64), static_cast<uint64_t>(prod));
 #endif
 }

@@ -280,7 +280,7 @@ public:
                 // Graceful runtime fallback: keep GPU path disabled.
                 use_gpu_ = false;
             } else {
-                P3_CUDA_CHECK(err);
+                p3_cuda_compat::throw_if_cuda_error(err, __FILE__, __LINE__);
             }
         }
 #else

@@ -239,6 +239,43 @@ __global__ void fri_fold_kernel(
     output[i] = result;
 }
 
+/**
+ * @brief Run the FRI fold kernels on GPU-resident buffers (launch + synchronize only).
+ *
+ * Does not allocate, copy host data, or free. Use with @p d_input / @p d_output already
+ * sized for the fold: @p d_input has @c n * (1<<log_arity) elements, @p d_output has @p n.
+ *
+ * @pre CUDA is enabled, a device exists, and @p log_arity is in [1,3].
+ */
+template <typename Val, typename Challenge>
+void fold_matrix_cuda_device(
+    const Challenge* d_input,
+    Challenge*       d_output,
+    const Challenge& beta,
+    size_t           log_arity,
+    size_t           log_height,
+    size_t           n)
+{
+    constexpr size_t BLOCK_SIZE = 256;
+    size_t           nblocks     = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    if (log_arity == 1) {
+        fri_fold_arity2_kernel<Val, Challenge>
+            <<<nblocks, BLOCK_SIZE>>>(d_input, d_output, beta, n, log_height);
+    } else if (log_arity == 2) {
+        fri_fold_kernel<Val, Challenge, 4>
+            <<<nblocks, BLOCK_SIZE>>>(d_input, d_output, beta, n, log_height, log_arity);
+    } else if (log_arity == 3) {
+        fri_fold_kernel<Val, Challenge, 8>
+            <<<nblocks, BLOCK_SIZE>>>(d_input, d_output, beta, n, log_height, log_arity);
+    } else {
+        throw std::invalid_argument("log_arity must be 1, 2, or 3");
+    }
+
+    P3_CUDA_CHECK(cudaGetLastError());
+    P3_CUDA_CHECK(cudaDeviceSynchronize());
+}
+
 #endif  // P3_CUDA_ENABLED
 
 // ============================================================
@@ -292,23 +329,9 @@ std::vector<Challenge> fold_matrix_cuda(
                                      current.size() * sizeof(Challenge),
                                      cudaMemcpyHostToDevice));
 
-            constexpr size_t BLOCK_SIZE = 256;
-            size_t nblocks = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            fold_matrix_cuda_device<Val, Challenge>(
+                d_input, d_output, beta, log_arity, log_height, n);
 
-            if (log_arity == 1) {
-                fri_fold_arity2_kernel<Val, Challenge>
-                    <<<nblocks, BLOCK_SIZE>>>(d_input, d_output, beta, n, log_height);
-            } else if (log_arity == 2) {
-                fri_fold_kernel<Val, Challenge, 4>
-                    <<<nblocks, BLOCK_SIZE>>>(d_input, d_output, beta, n, log_height, log_arity);
-            } else {
-                // log_arity == 3
-                fri_fold_kernel<Val, Challenge, 8>
-                    <<<nblocks, BLOCK_SIZE>>>(d_input, d_output, beta, n, log_height, log_arity);
-            }
-
-            P3_CUDA_CHECK(cudaGetLastError());
-            P3_CUDA_CHECK(cudaDeviceSynchronize());
             P3_CUDA_CHECK(cudaMemcpy(output.data(), d_output,
                                      n * sizeof(Challenge),
                                      cudaMemcpyDeviceToHost));

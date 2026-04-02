@@ -64,5 +64,14 @@ add_plonky3_test(symmetric_tests test_symmetric.cpp)
 
 add_plonky3_test(keccak_tests test_keccak.cpp)
 
+add_plonky3_test(sha256_tests test_sha256.cpp)
+
+if(ENABLE_CUDA)
+    add_plonky3_test(sha256_cuda_tests test_sha256_cuda.cu)
+    if(TARGET CUDA::cudart)
+        target_link_libraries(sha256_cuda_tests PRIVATE CUDA::cudart)
+    endif()
+endif()
+
 # -- Interpolation tests --
 add_plonky3_test(interpolation_tests test_interpolation.cpp)

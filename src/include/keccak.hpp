@@ -19,8 +19,7 @@ namespace p3_symmetric {
 namespace keccak_detail {
 
 inline uint64_t rotl64(uint64_t x, unsigned r) {
-    r &= 63u;
-    return (x << r) | (x >> (64u - r));
+    return (x << (r & 63)) | (x >> ((-r) & 63));
 }
 
 // tiny-keccak keccakf.rs
@@ -153,16 +152,28 @@ struct Keccak256Hash {
     }
 
     Digest hash_iter_slices(const std::vector<std::vector<uint8_t>>& slices) const {
-        std::vector<uint8_t> flat;
-        size_t total = 0;
-        for (const auto& row : slices) {
-            total += row.size();
+        std::array<uint64_t, KECCAK_STATE_LANES> words{};
+        uint8_t* const bytes = reinterpret_cast<uint8_t*>(words.data());
+        constexpr size_t kRateBytes = 136;
+        size_t offset = 0;
+
+        for (const auto& slice : slices) {
+            for (uint8_t byte : slice) {
+                bytes[offset++] ^= byte;
+                if (offset == kRateBytes) {
+                    keccak_detail::keccak_f1600(words.data());
+                    offset = 0;
+                }
+            }
         }
-        flat.reserve(total);
-        for (const auto& row : slices) {
-            flat.insert(flat.end(), row.begin(), row.end());
-        }
-        return hash_iter(flat);
+
+        bytes[offset] ^= 0x01;
+        bytes[kRateBytes - 1] ^= 0x80;
+        keccak_detail::keccak_f1600(words.data());
+
+        Digest out{};
+        std::memcpy(out.data(), bytes, 32);
+        return out;
     }
 };
 

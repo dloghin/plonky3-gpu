@@ -24,8 +24,7 @@ P3_HOST_DEVICE P3_CONSTEXPR_HD inline uint32_t monty_reduce_u64(uint64_t x) {
     constexpr uint32_t MU    = 0x81000001u;
     constexpr uint32_t MONTY_BITS = 32;
     constexpr uint64_t MASK64 = 0xFFFFFFFFu;
-
-    x &= 0xFFFFFFFFFFFFFFFFuLL;
+    
     uint64_t t = (x * static_cast<uint64_t>(MU)) & MASK64;
     uint64_t u = t * static_cast<uint64_t>(PRIME);
 
@@ -87,7 +86,7 @@ public:
 
     /// Construct from canonical u32 (reduced mod p).
     P3_HOST_DEVICE P3_CONSTEXPR_HD explicit KoalaBear(uint32_t canonical)
-        : monty_(koala_bear_detail::to_monty(canonical >= PRIME ? canonical % PRIME : canonical)) {}
+        : monty_(koala_bear_detail::to_monty(canonical)) {}
 
     P3_HOST_DEVICE P3_CONSTEXPR_HD explicit KoalaBear(uint64_t canonical)
         : monty_(koala_bear_detail::to_monty(static_cast<uint32_t>(canonical % PRIME_U64))) {}
@@ -242,10 +241,6 @@ inline const KoalaBear KoalaBear::ZERO = KoalaBear();
 inline const KoalaBear KoalaBear::ONE = KoalaBear::one_val();
 inline const KoalaBear KoalaBear::TWO = KoalaBear::two_val();
 inline const KoalaBear KoalaBear::NEG_ONE = KoalaBear::neg_one_val();
-#endif
-
-#if P3_CUDA_ENABLED
-__device__ __constant__ uint32_t KOALABEAR_PRIME = 0x7f000001;
 #endif
 
 } // namespace p3_field

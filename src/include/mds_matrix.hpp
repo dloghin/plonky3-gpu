@@ -218,5 +218,69 @@ public:
         ) {}
 };
 
+/**
+ * @brief KoalaBear MDS circulant matrices (p3-koala-bear mds.rs; same first rows as BabyBear for 8,12,16)
+ */
+template<typename KoalaBear>
+class MdsMatrixKoalaBear8 : public CirculantMdsMatrix<KoalaBear, 8> {
+public:
+    MdsMatrixKoalaBear8()
+        : CirculantMdsMatrix<KoalaBear, 8>(
+            std::array<uint64_t, 8>{7, 1, 3, 8, 8, 3, 4, 9}
+        ) {}
+};
+
+template<typename KoalaBear>
+class MdsMatrixKoalaBear12 : public CirculantMdsMatrix<KoalaBear, 12> {
+public:
+    MdsMatrixKoalaBear12()
+        : CirculantMdsMatrix<KoalaBear, 12>(
+            std::array<uint64_t, 12>{1, 1, 2, 1, 8, 9, 10, 7, 5, 9, 4, 10}
+        ) {}
+};
+
+template<typename KoalaBear>
+class MdsMatrixKoalaBear16 : public CirculantMdsMatrix<KoalaBear, 16> {
+public:
+    MdsMatrixKoalaBear16()
+        : CirculantMdsMatrix<KoalaBear, 16>(
+            std::array<uint64_t, 16>{1, 1, 51, 1, 11, 17, 2, 1, 101, 63, 15, 2, 67, 22, 13, 3}
+        ) {}
+};
+
+template<typename KoalaBear>
+class MdsMatrixKoalaBear24 : public CirculantMdsMatrix<KoalaBear, 24> {
+public:
+    MdsMatrixKoalaBear24()
+        : CirculantMdsMatrix<KoalaBear, 24>(
+            std::array<uint64_t, 24>{
+                0x2D0AAAAB, 0x64850517, 0x17F5551D, 0x04ECBEB5,
+                0x6D91A8D5, 0x60703026, 0x18D6F3CA, 0x729601A7,
+                0x77CDA9E2, 0x3C0F5038, 0x26D52A61, 0x0360405D,
+                0x68FC71C8, 0x2495A71D, 0x5D57AFC2, 0x1689DD98,
+                0x3C2C3DBE, 0x0C23DC41, 0x0524C7F2, 0x6BE4DF69,
+                0x0A6E572C, 0x5C7790FA, 0x17E118F6, 0x0878A07F
+            }
+        ) {}
+};
+
+template<typename KoalaBear>
+class MdsMatrixKoalaBear32 : public CirculantMdsMatrix<KoalaBear, 32> {
+public:
+    MdsMatrixKoalaBear32()
+        : CirculantMdsMatrix<KoalaBear, 32>(
+            std::array<uint64_t, 32>{
+                0x0BC00000, 0x2BED8F81, 0x337E0652, 0x4C4535D1,
+                0x4AF2DC32, 0x2DB4050F, 0x676A7CE3, 0x3A06B68E,
+                0x5E95C1B1, 0x2C5F54A0, 0x2332F13D, 0x58E757F1,
+                0x3AA6DCCE, 0x607EE630, 0x4ED57FF0, 0x6E08555B,
+                0x4C155556, 0x587FD0CE, 0x462F1551, 0x032A43CC,
+                0x5E2E43EA, 0x71609B02, 0x0ED97E45, 0x562CA7E9,
+                0x2CB70B1D, 0x4E941E23, 0x174A61C1, 0x117A9426,
+                0x73562137, 0x54596086, 0x487C560B, 0x68A4ACAB
+            }
+        ) {}
+};
+
 } // namespace p3_poseidon
 

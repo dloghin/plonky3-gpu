@@ -26,6 +26,8 @@ endfunction()
 # -- Field tests --
 add_plonky3_test(field_two_adic_tests test_two_adic.cpp)
 
+add_plonky3_test(koala_bear_tests test_koala_bear.cpp)
+
 add_plonky3_test(field_extension_tests test_extension_field.cpp)
 
 # -- Matrix tests --

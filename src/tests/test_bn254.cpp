@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 #include "bn254.hpp"
+#include "poseidon2_bn254.hpp"
 
 using namespace p3_field;
 
@@ -455,4 +456,105 @@ TEST(Bn254FieldAxioms, AdditiveInverse) {
 TEST(Bn254FieldAxioms, MultiplicativeInverse) {
     Bn254 a = Bn254::from_u64(12345);
     EXPECT_EQ(a * a.inv(), Bn254::one_val());
+}
+
+// ===========================================================================
+// Injective exponentiation (S-box)
+// ===========================================================================
+
+TEST(Bn254SBox, InjectiveExpN) {
+    // x^5 for small values
+    Bn254 x = Bn254::from_u64(2);
+    Bn254 x5 = x.injective_exp_n<5>();
+    expect_small(x5, 32); // 2^5 = 32
+
+    Bn254 y = Bn254::from_u64(3);
+    Bn254 y5 = y.injective_exp_n<5>();
+    expect_small(y5, 243); // 3^5 = 243
+}
+
+TEST(Bn254SBox, InjectiveExpRoundTrip) {
+    // x^5 then fifth-root should recover x
+    for (uint64_t v = 1; v <= 10; ++v) {
+        Bn254 x = Bn254::from_u64(v);
+        Bn254 x5 = x.injective_exp_n<5>();
+        Bn254 x_back = x5.injective_exp_root_n<5>();
+        EXPECT_EQ(x_back, x) << "Round trip failed for v=" << v;
+    }
+}
+
+// ===========================================================================
+// Poseidon2 BN254
+// ===========================================================================
+
+TEST(Bn254Poseidon2, InternalMatmul) {
+    // Test the internal diffusion matrix:
+    //   [2 1 1]
+    //   [1 2 1]
+    //   [1 1 3]
+    std::array<Bn254, 3> state = {
+        Bn254::from_u64(1), Bn254::from_u64(2), Bn254::from_u64(3)
+    };
+    poseidon2::bn254_matmul_internal(state);
+    // sum = 1 + 2 + 3 = 6
+    // new[0] = 1 + 6 = 7  (= 2*1 + 2 + 3)
+    // new[1] = 2 + 6 = 8  (= 1 + 2*2 + 3)
+    // new[2] = 2*3 + 6 = 12 (= 1 + 2 + 3*3)
+    expect_small(state[0], 7);
+    expect_small(state[1], 8);
+    expect_small(state[2], 12);
+}
+
+TEST(Bn254Poseidon2, PermutationTestVector) {
+    // Test vector from Rust: permute([1, 2, 3])
+    auto poseidon2 = poseidon2::default_bn254_poseidon2();
+
+    std::array<Bn254, 3> state = {
+        Bn254::from_u64(1), Bn254::from_u64(2), Bn254::from_u64(3)
+    };
+    poseidon2->permute_mut(state);
+
+    // Expected output (canonical form from Rust reference)
+    expect_canonical(state[0],
+        0x009aca578d210768ULL, 0xdd31c210c912aacaULL,
+        0x1ec6fdbcd5dc92caULL, 0x0a799a621cac2ceaULL);
+    expect_canonical(state[1],
+        0x2191be0e1598876aULL, 0xd14b1f5c6b1856a1ULL,
+        0xce99b299edfd70faULL, 0x1570f61795255f02ULL);
+    expect_canonical(state[2],
+        0x694ce6e9b8dc3019ULL, 0x2e722b76c3a25017ULL,
+        0xdde96c087a306f40ULL, 0x285e9571da987271ULL);
+}
+
+TEST(Bn254Poseidon2, PermutationZeroInput) {
+    // Permuting [0, 0, 0] should produce a non-trivial output
+    auto poseidon2 = poseidon2::default_bn254_poseidon2();
+
+    std::array<Bn254, 3> state = {
+        Bn254::zero_val(), Bn254::zero_val(), Bn254::zero_val()
+    };
+    poseidon2->permute_mut(state);
+
+    // Output should be non-zero
+    EXPECT_FALSE(state[0].is_zero());
+    EXPECT_FALSE(state[1].is_zero());
+    EXPECT_FALSE(state[2].is_zero());
+}
+
+TEST(Bn254Poseidon2, PermutationDifferentInputs) {
+    // Different inputs should produce different outputs
+    auto poseidon2 = poseidon2::default_bn254_poseidon2();
+
+    std::array<Bn254, 3> s1 = {
+        Bn254::from_u64(1), Bn254::from_u64(2), Bn254::from_u64(3)
+    };
+    std::array<Bn254, 3> s2 = {
+        Bn254::from_u64(4), Bn254::from_u64(5), Bn254::from_u64(6)
+    };
+    poseidon2->permute_mut(s1);
+    poseidon2->permute_mut(s2);
+
+    EXPECT_NE(s1[0], s2[0]);
+    EXPECT_NE(s1[1], s2[1]);
+    EXPECT_NE(s1[2], s2[2]);
 }

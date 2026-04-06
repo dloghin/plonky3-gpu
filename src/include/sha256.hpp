@@ -41,6 +41,19 @@ namespace sha256_detail {
 
 inline constexpr uint32_t H256_256_RAW[8] = {P3_SHA256_IV_LIST};
 
+#if P3_CUDA_ENABLED
+// Device-side SHA-256 round constants in constant memory.
+P3_DEVICE __constant__ uint32_t SHA256_K_DEVICE[64] = {P3_SHA256_K_LIST};
+#endif
+
+P3_HOST_DEVICE P3_INLINE uint32_t sha256_k_at(size_t i) {
+#if P3_CUDA_ENABLED && defined(__CUDA_ARCH__)
+    return SHA256_K_DEVICE[i];
+#else
+    return SHA256_K[i];
+#endif
+}
+
 P3_HOST_DEVICE P3_INLINE uint32_t rotr32(uint32_t x, uint32_t n) {
     return (x >> n) | (x << (32u - n));
 }
@@ -84,9 +97,6 @@ P3_HOST_DEVICE P3_INLINE void store_be32(uint32_t x, uint8_t* out) {
 }
 
 P3_HOST_DEVICE P3_INLINE void compress_block(uint32_t state[8], const uint8_t block[64]) {
-    // Local copy: nvcc does not treat namespace-scope constexpr arrays as device symbols.
-    const uint32_t k_local[64] = {P3_SHA256_K_LIST};
-
     uint32_t w[64];
     for (size_t i = 0; i < 16; ++i) {
         w[i] = load_be32(block + 4 * i);
@@ -105,7 +115,7 @@ P3_HOST_DEVICE P3_INLINE void compress_block(uint32_t state[8], const uint8_t bl
     uint32_t h = state[7];
 
     for (size_t i = 0; i < 64; ++i) {
-        const uint32_t t1 = h + big_sigma1(e) + ch(e, f, g) + k_local[i] + w[i];
+        const uint32_t t1 = h + big_sigma1(e) + ch(e, f, g) + sha256_k_at(i) + w[i];
         const uint32_t t2 = big_sigma0(a) + maj(a, b, c);
         h = g;
         g = f;
@@ -242,11 +252,11 @@ struct Sha256 {
         return ctx.finalize();
     }
 
-    P3_HOST_DEVICE P3_INLINE Digest hash_iter(const std::vector<uint8_t>& data) const {
+    P3_HOST P3_INLINE Digest hash_iter(const std::vector<uint8_t>& data) const {
         return hash_iter(data.data(), data.size());
     }
 
-    P3_HOST_DEVICE P3_INLINE Digest hash_iter_slices(const std::vector<std::vector<uint8_t>>& slices) const {
+    P3_HOST P3_INLINE Digest hash_iter_slices(const std::vector<std::vector<uint8_t>>& slices) const {
         sha256_detail::Sha256Ctx ctx;
         for (const auto& s : slices) {
             if (!s.empty()) {

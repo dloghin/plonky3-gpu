@@ -19,11 +19,11 @@ public:
     P3_HOST_DEVICE void permute_mut(std::array<Mersenne31, WIDTH>& state) const {
         std::array<Mersenne31, WIDTH> out{};
         for (size_t i = 0; i < WIDTH; ++i) {
-            Mersenne31 acc = Mersenne31::zero_val();
+            uint64_t acc = 0;
             for (size_t j = 0; j < WIDTH; ++j) {
-                acc += Mersenne31(kCirculant[(j + WIDTH - i) % WIDTH]) * state[j];
+                acc += static_cast<uint64_t>(kCirculant[(j + WIDTH - i) % WIDTH]) * state[j].value();
             }
-            out[i] = acc;
+            out[i] = Mersenne31(acc);
         }
         state = out;
     }
@@ -121,9 +121,11 @@ private:
     }
 
     P3_HOST_DEVICE static void bricks(State& state) {
-        State old = state;
+        Mersenne31 prev = state[0];
         for (size_t i = 1; i < WIDTH; ++i) {
-            state[i] += old[i - 1].square();
+            Mersenne31 current = state[i];
+            state[i] += prev.square();
+            prev = current;
         }
     }
 

@@ -95,19 +95,19 @@ private:
     }
 
     P3_HOST_DEVICE static uint8_t final_s_box(uint8_t y) {
-        y &= 0x7Fu;
-        const uint8_t y_rot_1 = static_cast<uint8_t>(((y >> 6) | (y << 1)) & 0x7Fu);
-        const uint8_t y_rot_2 = static_cast<uint8_t>(((y >> 5) | (y << 2)) & 0x7Fu);
-        const uint8_t tmp = static_cast<uint8_t>((y ^ (static_cast<uint8_t>(~y_rot_1) & y_rot_2)) & 0x7Fu);
-        return static_cast<uint8_t>(((tmp >> 6) | (tmp << 1)) & 0x7Fu);
+        y &= 0x7fu;
+        const uint8_t y_rot_1 = static_cast<uint8_t>(((y >> 6) | (y << 1)) & 0x7fu);
+        const uint8_t y_rot_2 = static_cast<uint8_t>(((y >> 5) | (y << 2)) & 0x7fu);
+        const uint8_t tmp = static_cast<uint8_t>((y ^ (static_cast<uint8_t>(~y_rot_1) & y_rot_2)) & 0x7fu);
+        return static_cast<uint8_t>(((tmp >> 6) | (tmp << 1)) & 0x7fu);
     }
 
     P3_HOST_DEVICE static Mersenne31 bar(const Mersenne31& element) {
         const uint32_t x = element.value();
-        const uint32_t b0 = static_cast<uint32_t>(s_box(static_cast<uint8_t>(x & 0xFFu)));
-        const uint32_t b1 = static_cast<uint32_t>(s_box(static_cast<uint8_t>((x >> 8) & 0xFFu)));
-        const uint32_t b2 = static_cast<uint32_t>(s_box(static_cast<uint8_t>((x >> 16) & 0xFFu)));
-        const uint32_t b3 = static_cast<uint32_t>(final_s_box(static_cast<uint8_t>((x >> 24) & 0x7Fu)));
+        const uint32_t b0 = static_cast<uint32_t>(s_box(static_cast<uint8_t>(x & 0xffu)));
+        const uint32_t b1 = static_cast<uint32_t>(s_box(static_cast<uint8_t>((x >> 8) & 0xffu)));
+        const uint32_t b2 = static_cast<uint32_t>(s_box(static_cast<uint8_t>((x >> 16) & 0xffu)));
+        const uint32_t b3 = static_cast<uint32_t>(final_s_box(static_cast<uint8_t>((x >> 24) & 0x7fu)));
         return Mersenne31((b3 << 24) | (b2 << 16) | (b1 << 8) | b0);
     }
 

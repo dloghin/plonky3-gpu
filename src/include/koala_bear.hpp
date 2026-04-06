@@ -23,7 +23,7 @@ P3_HOST_DEVICE P3_CONSTEXPR_HD inline uint32_t monty_reduce_u64(uint64_t x) {
     constexpr uint32_t PRIME = 0x7f000001u;
     constexpr uint32_t MU    = 0x81000001u;
     constexpr uint32_t MONTY_BITS = 32;
-    constexpr uint64_t MASK64 = 0xFFFFFFFFu;
+    constexpr uint64_t MASK64 = 0xffffffffu;
     
     uint64_t t = (x * static_cast<uint64_t>(MU)) & MASK64;
     uint64_t u = t * static_cast<uint64_t>(PRIME);
@@ -57,7 +57,7 @@ public:
     static constexpr uint64_t PRIME_U64 = PRIME;
     static constexpr uint32_t MONTY_MU  = 0x81000001u;
     static constexpr uint32_t MONTY_BITS = 32;
-    static constexpr uint32_t MONTY_MASK = 0xFFFFFFFFu;
+    static constexpr uint32_t MONTY_MASK = 0xffffffffu;
 
     static constexpr size_t TWO_ADICITY = 24;
     static constexpr size_t FIELD_BITS  = 31;

@@ -14,7 +14,7 @@ namespace p3_field {
 /**
  * @brief The Goldilocks prime field: p = 2^64 - 2^32 + 1
  *
- * Prime value: 0xFFFFFFFF00000001 = 18446744069414584321
+ * Prime value: 0xffffffff00000001 = 18446744069414584321
  *
  * This implementation supports both CPU (C++) and GPU (CUDA) execution.
  */
@@ -23,8 +23,8 @@ private:
     uint64_t value_;
 
 public:
-    static constexpr uint64_t PRIME = 0xFFFFFFFF00000001ULL; // 2^64 - 2^32 + 1
-    static constexpr uint64_t NEG_ORDER = 0xFFFFFFFFULL; // 2^32 - 1
+    static constexpr uint64_t PRIME = 0xffffffff00000001ULL; // 2^64 - 2^32 + 1
+    static constexpr uint64_t NEG_ORDER = 0xffffffffULL; // 2^32 - 1
 
     // Constructors
     P3_HOST_DEVICE P3_CONSTEXPR_HD Goldilocks() : value_(0) {}
@@ -208,8 +208,8 @@ inline const Goldilocks Goldilocks::NEG_ONE = Goldilocks(PRIME - 1);
 
 // Device constants for CUDA (must be defined in a .cu file if needed)
 #if P3_CUDA_ENABLED
-__device__ __constant__ uint64_t GOLDILOCKS_PRIME = 0xFFFFFFFF00000001ULL;
-__device__ __constant__ uint64_t GOLDILOCKS_NEG_ORDER = 0xFFFFFFFFULL;
+__device__ __constant__ uint64_t GOLDILOCKS_PRIME = 0xffffffff00000001ULL;
+__device__ __constant__ uint64_t GOLDILOCKS_NEG_ORDER = 0xffffffffULL;
 #endif
 
 } // namespace p3_field

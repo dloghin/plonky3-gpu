@@ -14,7 +14,7 @@ namespace p3_field {
 /**
  * @brief Mersenne-31 prime field: p = 2^31 - 1
  *
- * Prime value: 0x7FFFFFFF = 2147483647
+ * Prime value: 0x7fffffff = 2147483647
  *
  * This implementation supports both CPU (C++) and GPU (CUDA) execution.
  */
@@ -23,7 +23,7 @@ private:
     uint32_t value_;
 
 public:
-    static constexpr uint32_t PRIME = 0x7FFFFFFF; // 2^31 - 1
+    static constexpr uint32_t PRIME = 0x7fffffff; // 2^31 - 1
     static constexpr uint64_t PRIME_U64 = PRIME;
 
     // Constructors
@@ -147,7 +147,7 @@ inline const Mersenne31 Mersenne31::NEG_ONE = Mersenne31(PRIME - 1);
 
 // Device constants for CUDA (must be defined in a .cu file if needed)
 #if P3_CUDA_ENABLED
-__device__ __constant__ uint32_t MERSENNE31_PRIME = 0x7FFFFFFF;
+__device__ __constant__ uint32_t MERSENNE31_PRIME = 0x7fffffff;
 #endif
 
 } // namespace p3_field

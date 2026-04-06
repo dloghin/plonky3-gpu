@@ -645,7 +645,7 @@ public:
       0x1b0d0ef99fffffe6ULL,
       0xeaba68a3a32a913fULL,
       0x47d8eb76d8dd0689ULL,
-      0x15d0085520f5bbC3ULL,
+      0x15d0085520f5bbc3ULL,
   };
 
   // Montgomery form of ONE (R mod P = 2^256 mod P)
@@ -880,7 +880,7 @@ public:
     for (int nibble_idx = 63; nibble_idx >= 0; --nibble_idx) {
       int limb_idx = nibble_idx / 16;
       int shift = (nibble_idx % 16) * 4;
-      int nibble = static_cast<int>((exp[limb_idx] >> shift) & 0xF);
+      int nibble = static_cast<int>((exp[limb_idx] >> shift) & 0xf);
 
       if (started) {
         // Square 4 times

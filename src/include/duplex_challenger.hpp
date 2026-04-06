@@ -57,7 +57,7 @@ class DuplexChallenger {
 
     void observe_witness(uint64_t witness) {
         output_buffer_.clear();
-        absorb_without_invalidation(F(static_cast<uint32_t>(witness & 0xFFFFFFFFu)));
+        absorb_without_invalidation(F(static_cast<uint32_t>(witness & 0xffffffffu)));
         absorb_without_invalidation(F(static_cast<uint32_t>(witness >> 32)));
     }
 

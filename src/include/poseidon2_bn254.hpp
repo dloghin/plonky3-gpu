@@ -10,7 +10,7 @@
  * which equals 1 + diag(1, 1, 2).
  *
  * The external layer uses the HorizenLabs 4x4 MDS matrix applied via
- * mds_light_permutation (for WIDTH=3 this is just: state[i] += sum).
+ * mds_light_permutation (for WIDTH=3 this is the specialized I + ones matrix).
  *
  * Round constants come from the zkhash reference implementation
  * (poseidon2_instance_bn256, RC3 table) with 128-bit security:

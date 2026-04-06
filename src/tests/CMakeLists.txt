@@ -63,6 +63,7 @@ add_plonky3_test(challenger_tests test_challenger.cpp)
 add_plonky3_test(symmetric_tests test_symmetric.cpp)
 
 add_plonky3_test(keccak_tests test_keccak.cpp)
+add_plonky3_test(monolith_tests test_monolith.cpp)
 
 add_plonky3_test(sha256_tests test_sha256.cpp)
 
@@ -75,3 +76,6 @@ endif()
 
 # -- Interpolation tests --
 add_plonky3_test(interpolation_tests test_interpolation.cpp)
+
+# -- BN254 field tests --
+add_plonky3_test(bn254_tests test_bn254.cpp)

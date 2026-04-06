@@ -75,18 +75,17 @@ public:
         return out;
     }
 
-    P3_HOST_DEVICE static const RoundConstants& round_constants() {
-        static const RoundConstants constants = {{
-            {{Mersenne31(1033436816u), Mersenne31(348863691u), Mersenne31(2081103763u), Mersenne31(994924237u), Mersenne31(64925253u), Mersenne31(677331122u), Mersenne31(1735246508u), Mersenne31(26616398u), Mersenne31(1538025930u), Mersenne31(1710098735u), Mersenne31(995978747u), Mersenne31(1336376181u), Mersenne31(2051827886u), Mersenne31(447361871u), Mersenne31(1829769948u), Mersenne31(718914942u)}},
-            {{Mersenne31(474392908u), Mersenne31(549190350u), Mersenne31(140657697u), Mersenne31(642927328u), Mersenne31(325988066u), Mersenne31(2087527882u), Mersenne31(1429283917u), Mersenne31(537644603u), Mersenne31(2072852575u), Mersenne31(707584548u), Mersenne31(482862777u), Mersenne31(829305883u), Mersenne31(1016581262u), Mersenne31(148132697u), Mersenne31(397768408u), Mersenne31(50011713u)}},
-            {{Mersenne31(897025585u), Mersenne31(597857797u), Mersenne31(389941735u), Mersenne31(1101342757u), Mersenne31(1318622762u), Mersenne31(1954712215u), Mersenne31(1789281623u), Mersenne31(529033351u), Mersenne31(913202249u), Mersenne31(1707514131u), Mersenne31(616819674u), Mersenne31(197082924u), Mersenne31(1180366701u), Mersenne31(241453365u), Mersenne31(1700285697u), Mersenne31(1755996717u)}},
-            {{Mersenne31(1917698553u), Mersenne31(1252360787u), Mersenne31(1273610561u), Mersenne31(212500927u), Mersenne31(1268578595u), Mersenne31(1403584286u), Mersenne31(612974258u), Mersenne31(1024938353u), Mersenne31(1546879084u), Mersenne31(1752198737u), Mersenne31(757476618u), Mersenne31(916242693u), Mersenne31(1739315286u), Mersenne31(1012279900u), Mersenne31(1254788910u), Mersenne31(1865871347u)}},
-            {{Mersenne31(534908981u), Mersenne31(1994856941u), Mersenne31(1598293579u), Mersenne31(510970053u), Mersenne31(1868253334u), Mersenne31(1194878847u), Mersenne31(360986778u), Mersenne31(1303396410u), Mersenne31(337495830u), Mersenne31(1233499389u), Mersenne31(1058246115u), Mersenne31(1413610001u), Mersenne31(799568848u), Mersenne31(48161847u), Mersenne31(1339121921u), Mersenne31(1110912837u)}},
-        }};
-        return constants;
-    }
+    P3_HOST_DEVICE static const RoundConstants& round_constants() { return k_round_constants_; }
 
 private:
+    static constexpr RoundConstants k_round_constants_ = {{
+        {{Mersenne31(1033436816u), Mersenne31(348863691u), Mersenne31(2081103763u), Mersenne31(994924237u), Mersenne31(64925253u), Mersenne31(677331122u), Mersenne31(1735246508u), Mersenne31(26616398u), Mersenne31(1538025930u), Mersenne31(1710098735u), Mersenne31(995978747u), Mersenne31(1336376181u), Mersenne31(2051827886u), Mersenne31(447361871u), Mersenne31(1829769948u), Mersenne31(718914942u)}},
+        {{Mersenne31(474392908u), Mersenne31(549190350u), Mersenne31(140657697u), Mersenne31(642927328u), Mersenne31(325988066u), Mersenne31(2087527882u), Mersenne31(1429283917u), Mersenne31(537644603u), Mersenne31(2072852575u), Mersenne31(707584548u), Mersenne31(482862777u), Mersenne31(829305883u), Mersenne31(1016581262u), Mersenne31(148132697u), Mersenne31(397768408u), Mersenne31(50011713u)}},
+        {{Mersenne31(897025585u), Mersenne31(597857797u), Mersenne31(389941735u), Mersenne31(1101342757u), Mersenne31(1318622762u), Mersenne31(1954712215u), Mersenne31(1789281623u), Mersenne31(529033351u), Mersenne31(913202249u), Mersenne31(1707514131u), Mersenne31(616819674u), Mersenne31(197082924u), Mersenne31(1180366701u), Mersenne31(241453365u), Mersenne31(1700285697u), Mersenne31(1755996717u)}},
+        {{Mersenne31(1917698553u), Mersenne31(1252360787u), Mersenne31(1273610561u), Mersenne31(212500927u), Mersenne31(1268578595u), Mersenne31(1403584286u), Mersenne31(612974258u), Mersenne31(1024938353u), Mersenne31(1546879084u), Mersenne31(1752198737u), Mersenne31(757476618u), Mersenne31(916242693u), Mersenne31(1739315286u), Mersenne31(1012279900u), Mersenne31(1254788910u), Mersenne31(1865871347u)}},
+        {{Mersenne31(534908981u), Mersenne31(1994856941u), Mersenne31(1598293579u), Mersenne31(510970053u), Mersenne31(1868253334u), Mersenne31(1194878847u), Mersenne31(360986778u), Mersenne31(1303396410u), Mersenne31(337495830u), Mersenne31(1233499389u), Mersenne31(1058246115u), Mersenne31(1413610001u), Mersenne31(799568848u), Mersenne31(48161847u), Mersenne31(1339121921u), Mersenne31(1110912837u)}},
+    }};
+
     P3_HOST_DEVICE static uint8_t s_box(uint8_t y) {
         const uint8_t y_rot_1 = static_cast<uint8_t>((y << 1) | (y >> 7));
         const uint8_t y_rot_2 = static_cast<uint8_t>((y << 2) | (y >> 6));

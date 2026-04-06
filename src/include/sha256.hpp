@@ -43,7 +43,7 @@ inline constexpr uint32_t H256_256_RAW[8] = {P3_SHA256_IV_LIST};
 
 #if P3_CUDA_ENABLED
 // Device-side SHA-256 round constants in constant memory.
-P3_DEVICE __constant__ uint32_t SHA256_K_DEVICE[64] = {P3_SHA256_K_LIST};
+static P3_DEVICE __constant__ uint32_t SHA256_K_DEVICE[64] = {P3_SHA256_K_LIST};
 #endif
 
 P3_HOST_DEVICE P3_INLINE uint32_t sha256_k_at(size_t i) {
@@ -97,12 +97,10 @@ P3_HOST_DEVICE P3_INLINE void store_be32(uint32_t x, uint8_t* out) {
 }
 
 P3_HOST_DEVICE P3_INLINE void compress_block(uint32_t state[8], const uint8_t block[64]) {
-    uint32_t w[64];
+    // Use a 16-word rolling message schedule to reduce stack/register pressure on CUDA.
+    uint32_t w[16];
     for (size_t i = 0; i < 16; ++i) {
         w[i] = load_be32(block + 4 * i);
-    }
-    for (size_t i = 16; i < 64; ++i) {
-        w[i] = small_sigma1(w[i - 2]) + w[i - 7] + small_sigma0(w[i - 15]) + w[i - 16];
     }
 
     uint32_t a = state[0];
@@ -115,7 +113,17 @@ P3_HOST_DEVICE P3_INLINE void compress_block(uint32_t state[8], const uint8_t bl
     uint32_t h = state[7];
 
     for (size_t i = 0; i < 64; ++i) {
-        const uint32_t t1 = h + big_sigma1(e) + ch(e, f, g) + sha256_k_at(i) + w[i];
+        uint32_t wi;
+        if (i < 16) {
+            wi = w[i];
+        } else {
+            const size_t j = i & 15u;
+            wi = small_sigma1(w[(i - 2) & 15u]) + w[(i - 7) & 15u] +
+                 small_sigma0(w[(i - 15) & 15u]) + w[j];
+            w[j] = wi;
+        }
+
+        const uint32_t t1 = h + big_sigma1(e) + ch(e, f, g) + sha256_k_at(i) + wi;
         const uint32_t t2 = big_sigma0(a) + maj(a, b, c);
         h = g;
         g = f;

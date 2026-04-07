@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <algorithm>
 
 namespace p3_symmetric {
 
@@ -172,7 +173,7 @@ P3_HOST P3_INLINE std::array<uint8_t, 32> compress_two_to_one(
     const std::array<uint8_t, 32>& left,
     const std::array<uint8_t, 32>& right) {
     std::array<uint8_t, 32> out{};
-    compress_two_to_one_raw((const uint8_t*)left.data(), (const uint8_t*)right.data(), (uint8_t*)   out.data());
+    compress_two_to_one_raw(left.data(), right.data(), out.data());
     return out;
 }
 
@@ -189,10 +190,8 @@ public:
         total_len_ += static_cast<uint64_t>(len);
         size_t pos = 0;
         while (pos < len) {
-            const size_t take = ((64u - buf_len_) < (len - pos)) ? (64u - buf_len_) : (len - pos);
-            for (size_t i = 0; i < take; ++i) {
-                buffer_[buf_len_ + i] = data[pos + i];
-            }
+            const size_t take = std::min(64u - buf_len_, len - pos);
+            std::copy_n(data + pos, take, buffer_.begin() + buf_len_);
             buf_len_ += take;
             pos += take;
             if (buf_len_ == 64u) {

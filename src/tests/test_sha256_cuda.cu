@@ -58,17 +58,14 @@ TEST(Sha256Cuda, KernelLaunchMatchesHostResult) {
         std::array<uint8_t, 32> got{};
         P3_CUDA_CHECK(cudaMemcpy(got.data(), d_out, 32, cudaMemcpyDeviceToHost));
         EXPECT_EQ(got, expected);
-    } catch (const std::runtime_error& e) {
+    } catch (const std::runtime_error& e) {        
         const std::string msg = e.what();
-        if (msg.find("unsupported toolchain") != std::string::npos) {
-            if (d_left) cudaFree(d_left);
-            if (d_right) cudaFree(d_right);
-            if (d_out) cudaFree(d_out);
-            GTEST_SKIP() << "CUDA driver/toolchain mismatch: " << msg;
-        }
         if (d_left) cudaFree(d_left);
         if (d_right) cudaFree(d_right);
         if (d_out) cudaFree(d_out);
+        if (msg.find("unsupported toolchain") != std::string::npos) {            
+            GTEST_SKIP() << "CUDA driver/toolchain mismatch: " << msg;
+        }        
         throw;
     }
 

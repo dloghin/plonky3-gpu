@@ -146,7 +146,7 @@ template P3_GLOBAL void matrix_multiply_kernel<double>(const double*, const doub
 // CudaMatrix method implementations
 template<typename T>
 CudaMatrix<T> CudaMatrix<T>::transpose() const {
-    CudaMatrix<T> result(height_, width_);
+    CudaMatrix<T> result(width_, height_);
     
     P3_CONSTEXPR size_t BLOCK_SIZE = 256;
     size_t total = size_;

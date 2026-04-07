@@ -168,24 +168,24 @@ P3_HOST_DEVICE P3_INLINE void compress_two_to_one_raw(
     }
 }
 
-P3_HOST_DEVICE P3_INLINE std::array<uint8_t, 32> compress_two_to_one(
+P3_HOST P3_INLINE std::array<uint8_t, 32> compress_two_to_one(
     const std::array<uint8_t, 32>& left,
     const std::array<uint8_t, 32>& right) {
     std::array<uint8_t, 32> out{};
-    compress_two_to_one_raw(left.data(), right.data(), out.data());
+    compress_two_to_one_raw((const uint8_t*)left.data(), (const uint8_t*)right.data(), (uint8_t*)   out.data());
     return out;
 }
 
 class Sha256Ctx {
 public:
-    P3_HOST_DEVICE P3_INLINE Sha256Ctx() : total_len_(0), buf_len_(0) {
+    P3_HOST P3_INLINE Sha256Ctx() : total_len_(0), buf_len_(0) {
         const uint32_t iv[8] = {P3_SHA256_IV_LIST};
         for (size_t i = 0; i < 8; ++i) {
             state_[i] = iv[i];
         }
     }
 
-    P3_HOST_DEVICE P3_INLINE void update(const uint8_t* data, size_t len) {
+    P3_HOST P3_INLINE void update(const uint8_t* data, size_t len) {
         total_len_ += static_cast<uint64_t>(len);
         size_t pos = 0;
         while (pos < len) {
@@ -202,7 +202,7 @@ public:
         }
     }
 
-    P3_HOST_DEVICE P3_INLINE std::array<uint8_t, 32> finalize() {
+    P3_HOST P3_INLINE std::array<uint8_t, 32> finalize() {
         buffer_[buf_len_++] = 0x80u;
 
         if (buf_len_ > 56u) {
@@ -252,7 +252,7 @@ inline constexpr std::array<uint32_t, 8> H256_256 = {
 struct Sha256 {
     using Digest = std::array<uint8_t, 32>;
 
-    P3_HOST_DEVICE P3_INLINE Digest hash_iter(const uint8_t* data, size_t len) const {
+    P3_HOST P3_INLINE Digest hash_iter(const uint8_t* data, size_t len) const {
         sha256_detail::Sha256Ctx ctx;
         if (len > 0) {
             ctx.update(data, len);
@@ -281,7 +281,7 @@ struct Sha256 {
 struct Sha256Compress {
     using Digest = std::array<uint8_t, 32>;
 
-    P3_HOST_DEVICE P3_INLINE Digest compress(
+    P3_HOST P3_INLINE Digest compress(
         const std::array<Digest, 2>& input) const {
         return sha256_detail::compress_two_to_one(input[0], input[1]);
     }

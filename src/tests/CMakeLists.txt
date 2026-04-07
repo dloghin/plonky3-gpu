@@ -74,8 +74,11 @@ if(ENABLE_CUDA)
     endif()
 endif()
 
+# -- BN254 field tests --
+add_plonky3_test(bn254_tests test_bn254.cpp)
+
 # -- Interpolation tests --
 add_plonky3_test(interpolation_tests test_interpolation.cpp)
 
-# -- BN254 field tests --
-add_plonky3_test(bn254_tests test_bn254.cpp)
+# -- Serialization tests --
+add_plonky3_test(serialization_tests test_serialization.cpp)

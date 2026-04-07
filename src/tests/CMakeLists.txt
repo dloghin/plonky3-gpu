@@ -64,13 +64,17 @@ add_plonky3_test(symmetric_tests test_symmetric.cpp)
 
 add_plonky3_test(keccak_tests test_keccak.cpp)
 add_plonky3_test(monolith_tests test_monolith.cpp)
-
 add_plonky3_test(sha256_tests test_sha256.cpp)
 
 if(ENABLE_CUDA)
     add_plonky3_test(sha256_cuda_tests test_sha256_cuda.cu)
+    add_plonky3_test(keccak_cuda_tests test_keccak_cuda.cu)
+    add_plonky3_test(monolith_cuda_tests test_monolith_cuda.cu)
+    target_compile_options(monolith_cuda_tests PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
     if(TARGET CUDA::cudart)
         target_link_libraries(sha256_cuda_tests PRIVATE CUDA::cudart)
+        target_link_libraries(keccak_cuda_tests PRIVATE CUDA::cudart)
+        target_link_libraries(monolith_cuda_tests PRIVATE CUDA::cudart)
     endif()
 endif()
 

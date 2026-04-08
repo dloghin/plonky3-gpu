@@ -12,7 +12,7 @@ namespace p3_symmetric {
 
 template<typename F, typename Perm, size_t WIDTH, size_t RATE, size_t OUT>
 class MultiField32PaddingFreeSponge {
-    static_assert(RATE <= WIDTH, "RATE must be <= WIDTH");
+    static_assert(RATE < WIDTH, "RATE must be < WIDTH to ensure non-zero capacity");
     static_assert(std::is_invocable_v<decltype(&Perm::permute_mut), const Perm&, std::array<uint64_t, WIDTH>&>,
         "Perm::permute_mut must be callable on const Perm with std::array<uint64_t, WIDTH>&");
 

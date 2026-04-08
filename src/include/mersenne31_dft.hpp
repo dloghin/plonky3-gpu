@@ -91,7 +91,7 @@ public:
 
     static Mersenne31Complex two_adic_generator(size_t bits) {
         if (bits > TWO_ADICITY) {
-            throw std::invalid_argument("bits exceeds TWO_ADICITY (31) for Mersenne31Complex");
+            throw std::invalid_argument("bits exceeds TWO_ADICITY (32) for Mersenne31Complex");
         }
         // From Plonky3's mersenne_31.rs EXT_TWO_ADIC_GENERATORS[32]:
         // a primitive 2^32-th root of unity in Complex<Mersenne31>.

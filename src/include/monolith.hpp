@@ -78,7 +78,7 @@ public:
     P3_HOST static const RoundConstants& round_constants() {
         static const RoundConstants constants = []() {
             RoundConstants out{};
-            const auto round_constants_u32_vals = round_constants_u32();
+            constexpr auto round_constants_u32_vals = round_constants_u32();
             for (size_t r = 0; r < NUM_FULL_ROUNDS; ++r) {
                 for (size_t i = 0; i < WIDTH; ++i) {
                     out[r][i] = Mersenne31(round_constants_u32_vals[r][i]);
@@ -133,7 +133,7 @@ private:
     }
 
     P3_HOST_DEVICE static void add_round_constants(State& state, size_t round_idx) {
-        const auto round_constants_u32_vals = round_constants_u32();
+        constexpr auto round_constants_u32_vals = round_constants_u32();
         for (size_t i = 0; i < WIDTH; ++i) {
             state[i] += Mersenne31(round_constants_u32_vals[round_idx][i]);
         }

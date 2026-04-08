@@ -58,7 +58,7 @@ public:
         return Mersenne31Complex(real_, p3_field::Mersenne31::zero_val() - imag_);
     }
     Mersenne31Complex halve() const {
-        const auto two_inv = (p3_field::Mersenne31::one_val() + p3_field::Mersenne31::one_val()).inv();
+        static const auto two_inv = p3_field::Mersenne31(1073741824u);
         return Mersenne31Complex(real_ * two_inv, imag_ * two_inv);
     }
     Mersenne31Complex inv() const {

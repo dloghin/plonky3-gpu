@@ -42,12 +42,13 @@ unflatten_from_base(const Matrix<F>& base_matrix) {
     std::vector<Ext> ext_values(h * ext_w);
 
     for (size_t r = 0; r < h; ++r) {
+        Ext* row_out = &ext_values[r * ext_w];
         for (size_t c = 0; c < ext_w; ++c) {
             std::array<F, D> coeffs{};
             for (size_t k = 0; k < D; ++k) {
                 coeffs[k] = base_matrix.get_unchecked(r, c * D + k);
             }
-            ext_values[r * ext_w + c] = Ext(coeffs);
+            row_out[c] = Ext(coeffs);
         }
     }
 

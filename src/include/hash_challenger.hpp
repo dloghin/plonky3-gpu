@@ -11,6 +11,11 @@ namespace p3_challenger {
 
 template<typename T, typename Hasher, size_t OUT_SIZE>
 class HashChallenger {
+    using hash_iter_result =
+        std::decay_t<decltype(std::declval<Hasher&>().hash_iter(std::declval<const std::vector<T>&>()))>;
+    static_assert(std::is_same_v<hash_iter_result, std::array<T, OUT_SIZE>>,
+        "HashChallenger: Hasher::hash_iter must return std::array<T, OUT_SIZE>");
+
 public:
     explicit HashChallenger(Hasher hasher, std::vector<T> initial_state = {})
         : input_buffer_(std::move(initial_state)), hasher_(std::move(hasher)) {}

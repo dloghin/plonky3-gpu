@@ -68,7 +68,9 @@ public:
     }
 
     Mersenne31Complex square() const {
-        return mul(*this);
+        const auto real_sq = (real_ - imag_) * (real_ + imag_);
+        const auto imag_sq = (real_ * imag_).double_val();
+        return Mersenne31Complex(real_sq, imag_sq);
     }
     Mersenne31Complex exp_u64(uint64_t power) const {
         if (power == 0) return one_val();

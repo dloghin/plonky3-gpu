@@ -44,6 +44,7 @@ add_plonky3_test(linear_map_tests test_linear_map.cpp)
 
 # -- DFT tests --
 add_plonky3_test(dft_tests test_dft.cpp)
+add_plonky3_test(dft_variants_tests test_dft_variants.cpp)
 
 add_plonky3_test(ntt_cuda_tests test_ntt_cuda.cpp)
 
@@ -58,6 +59,7 @@ add_plonky3_test(commit_tests test_commit.cpp)
 
 # -- Challenger tests --
 add_plonky3_test(challenger_tests test_challenger.cpp)
+add_plonky3_test(challengers_tests test_challengers.cpp)
 
 # -- Symmetric tests --
 add_plonky3_test(symmetric_tests test_symmetric.cpp)

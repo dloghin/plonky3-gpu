@@ -86,14 +86,23 @@ private:
 
             threads.emplace_back([&, c_begin, c_end]() {
                 Radix2Dit<F> dit;
-                for (size_t c = c_begin; c < c_end; ++c) {
-                    std::vector<F> col(h);
-                    for (size_t r = 0; r < h; ++r) {
-                        col[r] = mat.get_unchecked(r, c);
+                const size_t local_w = c_end - c_begin;
+
+                // Process this worker's columns as one submatrix to avoid
+                // per-column vector/matrix allocations in the hot loop.
+                std::vector<F> block_vals(h * local_w);
+                for (size_t r = 0; r < h; ++r) {
+                    for (size_t c = 0; c < local_w; ++c) {
+                        block_vals[r * local_w + c] = mat.get_unchecked(r, c_begin + c);
                     }
-                    auto transformed_col = op(dit, p3_matrix::RowMajorMatrix<F>(std::move(col), 1));
-                    for (size_t r = 0; r < h; ++r) {
-                        out.set_unchecked(r, c, transformed_col.get_unchecked(r, 0));
+                }
+
+                auto transformed_block =
+                    op(dit, p3_matrix::RowMajorMatrix<F>(std::move(block_vals), local_w));
+
+                for (size_t r = 0; r < h; ++r) {
+                    for (size_t c = 0; c < local_w; ++c) {
+                        out.set_unchecked(r, c_begin + c, transformed_block.get_unchecked(r, c));
                     }
                 }
             });

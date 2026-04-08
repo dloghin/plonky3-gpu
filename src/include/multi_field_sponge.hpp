@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include <vector>
 
 namespace p3_symmetric {
@@ -12,6 +13,8 @@ namespace p3_symmetric {
 template<typename F, typename Perm, size_t WIDTH, size_t RATE, size_t OUT>
 class MultiField32PaddingFreeSponge {
     static_assert(RATE <= WIDTH, "RATE must be <= WIDTH");
+    static_assert(std::is_invocable_v<decltype(&Perm::permute_mut), const Perm&, std::array<uint64_t, WIDTH>&>,
+        "Perm::permute_mut must be callable on const Perm with std::array<uint64_t, WIDTH>&");
 
 public:
     explicit MultiField32PaddingFreeSponge(Perm perm) : permutation_(std::move(perm)) {}
@@ -53,7 +56,7 @@ public:
     }
 
 private:
-    mutable Perm permutation_;
+    Perm permutation_;
 };
 
 } // namespace p3_symmetric

@@ -63,6 +63,7 @@ add_plonky3_test(challengers_tests test_challengers.cpp)
 
 # -- Symmetric tests --
 add_plonky3_test(symmetric_tests test_symmetric.cpp)
+add_plonky3_test(symmetric_extended_tests test_symmetric_extended.cpp)
 
 add_plonky3_test(keccak_tests test_keccak.cpp)
 add_plonky3_test(monolith_tests test_monolith.cpp)

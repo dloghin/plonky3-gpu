@@ -21,11 +21,10 @@ public:
         std::vector<uint8_t> bytes;
         bytes.reserve(input.size() * 4);
         for (const auto& v : input) {
-            const uint32_t x = static_cast<uint32_t>(v.as_canonical_u64());
-            bytes.push_back(static_cast<uint8_t>(x & 0xffu));
-            bytes.push_back(static_cast<uint8_t>((x >> 8) & 0xffu));
-            bytes.push_back(static_cast<uint8_t>((x >> 16) & 0xffu));
-            bytes.push_back(static_cast<uint8_t>((x >> 24) & 0xffu));
+            const uint64_t x = v.as_canonical_u64();
+            for (size_t i = 0; i < sizeof(decltype(F::PRIME)); ++i) {
+                bytes.push_back(static_cast<uint8_t>((x >> (8 * i)) & 0xffu));
+            }
         }
         const auto digest = inner_.hash_iter(bytes);
         return decode_to_field(digest);

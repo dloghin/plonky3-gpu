@@ -3,6 +3,7 @@
 #include "challenger_traits.hpp"
 
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -61,12 +62,27 @@ public:
         }
     }
 
+    /**
+     * @brief Sample `bits` bits into a `size_t` using the byte-oriented inner RNG.
+     *
+     * Draws fresh bytes from `inner_.sample()` until `bits` bits are filled.
+     * Unlike masking a single `sample()` field element, this does not cap entropy
+     * at the field bit-width (e.g. 31 bits for BabyBear when 64 bits are requested).
+     */
     size_t sample_bits(size_t bits) {
+        assert(bits <= sizeof(size_t) * 8);
         if (bits == 0) return 0;
-        const F v = sample();
-        const uint64_t raw = v.as_canonical_u64();
-        const uint64_t mask = bits >= 64 ? ~uint64_t(0) : ((uint64_t(1) << bits) - 1u);
-        return static_cast<size_t>(raw & mask);
+        size_t result = 0;
+        size_t filled = 0;
+        while (filled < bits) {
+            const uint8_t b = inner_.sample();
+            const size_t need = bits - filled;
+            const size_t take = need < 8 ? need : 8;
+            const size_t mask = (static_cast<size_t>(1) << take) - 1u;
+            result |= (static_cast<size_t>(b) & mask) << filled;
+            filled += take;
+        }
+        return result;
     }
 
     Inner& inner() { return inner_; }

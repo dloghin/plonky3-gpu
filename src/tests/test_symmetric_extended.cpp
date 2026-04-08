@@ -56,6 +56,20 @@ TEST(SymmetricExtended, SerializingHasherKeccakInnerWorks) {
     EXPECT_TRUE(any_non_zero);
 }
 
+struct DigestHighByteOnly {
+    std::array<uint8_t, 8> hash_iter(const std::vector<uint8_t>&) const {
+        std::array<uint8_t, 8> out{};
+        out[4] = 1; // nonzero only in bytes 4..7; 4-byte decode would miss it
+        return out;
+    }
+};
+
+TEST(SymmetricExtended, SerializingHasherGoldilocksUsesFullEightByteLanes) {
+    SerializingHasher<Goldilocks, DigestHighByteOnly, 8, 1> h(DigestHighByteOnly{});
+    const auto d = h.hash_iter({Goldilocks::zero_val()});
+    EXPECT_NE(d[0], Goldilocks::zero_val());
+}
+
 TEST(SymmetricExtended, MultiFieldSpongePacksPairsIntoU64Lanes) {
     MultiField32PaddingFreeSponge<BabyBear, MockU64Perm, 4, 2, 4> sponge(MockU64Perm{});
     std::vector<BabyBear> input = {BabyBear(1u), BabyBear(2u), BabyBear(3u), BabyBear(4u)};

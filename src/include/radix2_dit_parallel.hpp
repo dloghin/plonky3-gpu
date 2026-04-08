@@ -34,7 +34,7 @@ public:
     p3_matrix::RowMajorMatrix<F> coset_dft_batch(
         p3_matrix::RowMajorMatrix<F> mat, const F& shift)
     {
-        return run_column_parallel(std::move(mat), [&shift](p3_matrix::RowMajorMatrix<F> col_mat) {
+        return run_column_parallel(std::move(mat), [shift](p3_matrix::RowMajorMatrix<F> col_mat) {
             Radix2Dit<F> dit;
             return dit.coset_dft_batch(std::move(col_mat), shift);
         });
@@ -43,7 +43,7 @@ public:
     p3_matrix::RowMajorMatrix<F> coset_idft_batch(
         p3_matrix::RowMajorMatrix<F> mat, const F& shift)
     {
-        return run_column_parallel(std::move(mat), [&shift](p3_matrix::RowMajorMatrix<F> col_mat) {
+        return run_column_parallel(std::move(mat), [shift](p3_matrix::RowMajorMatrix<F> col_mat) {
             Radix2Dit<F> dit;
             return dit.coset_idft_batch(std::move(col_mat), shift);
         });

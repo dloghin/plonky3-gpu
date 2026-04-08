@@ -101,24 +101,26 @@ TEST(SerializingChallenger, SampleRoundTripFromBytes) {
 }
 
 TEST(MultiFieldChallenger, PacksAndUnpacksDeterministically) {
-    U64QueueChallenger inner({0x0004000300020001ULL});
-    MultiFieldChallenger<BabyBear, U64QueueChallenger, 4> c(std::move(inner));
+    // WIDTH=2: each element gets 32 bits in the packed uint64.
+    // Pack two BabyBear values: lo=100000, hi=200000 → (200000 << 32) | 100000
+    const uint64_t packed = (uint64_t(200000u) << 32) | uint64_t(100000u);
+    U64QueueChallenger inner({packed});
+    MultiFieldChallenger<BabyBear, U64QueueChallenger, 2> c(std::move(inner));
 
-    // unpack order is sampled from back of chunk: [1,2,3,4] => returns 4,3,2,1
-    EXPECT_EQ(c.sample(), BabyBear(4u));
-    EXPECT_EQ(c.sample(), BabyBear(3u));
-    EXPECT_EQ(c.sample(), BabyBear(2u));
-    EXPECT_EQ(c.sample(), BabyBear(1u));
+    // unpack order: sampled from back of chunk: [100000, 200000] => returns 200000, 100000
+    EXPECT_EQ(c.sample(), BabyBear(200000u));
+    EXPECT_EQ(c.sample(), BabyBear(100000u));
 }
 
 TEST(MultiFieldChallenger, ObserveSameSequenceProducesSameChallenges) {
-    MultiFieldChallenger<BabyBear, U64QueueChallenger, 4> c1(U64QueueChallenger({0x0008000700060005ULL}));
-    MultiFieldChallenger<BabyBear, U64QueueChallenger, 4> c2(U64QueueChallenger({0x0008000700060005ULL}));
+    const uint64_t seed = (uint64_t(999999u) << 32) | uint64_t(888888u);
+    MultiFieldChallenger<BabyBear, U64QueueChallenger, 2> c1(U64QueueChallenger({seed}));
+    MultiFieldChallenger<BabyBear, U64QueueChallenger, 2> c2(U64QueueChallenger({seed}));
 
-    c1.observe(BabyBear(11u));
-    c1.observe(BabyBear(12u));
-    c2.observe(BabyBear(11u));
-    c2.observe(BabyBear(12u));
+    c1.observe(BabyBear(70000u));
+    c1.observe(BabyBear(80000u));
+    c2.observe(BabyBear(70000u));
+    c2.observe(BabyBear(80000u));
 
     EXPECT_EQ(c1.sample(), c2.sample());
     EXPECT_EQ(c1.sample(), c2.sample());

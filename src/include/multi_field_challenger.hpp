@@ -43,11 +43,16 @@ private:
     std::vector<F> pending_;
     std::vector<F> unpacked_output_;
 
+    static constexpr size_t BITS_PER_ELM = 64 / WIDTH;
+    static constexpr uint64_t ELM_MASK = BITS_PER_ELM >= 64
+        ? ~uint64_t(0)
+        : (uint64_t(1) << BITS_PER_ELM) - 1;
+
     static uint64_t pack_chunk(const std::vector<F>& chunk) {
         uint64_t packed = 0;
         for (size_t i = 0; i < WIDTH; ++i) {
-            const uint64_t limb = static_cast<uint64_t>(chunk[i].as_canonical_u64() & 0xffffu);
-            packed |= (limb << (16 * i));
+            const uint64_t val = chunk[i].as_canonical_u64();
+            packed |= (val << (BITS_PER_ELM * i));
         }
         return packed;
     }
@@ -55,7 +60,7 @@ private:
     static std::array<F, WIDTH> unpack_chunk(uint64_t packed) {
         std::array<F, WIDTH> out{};
         for (size_t i = 0; i < WIDTH; ++i) {
-            const uint32_t limb = static_cast<uint32_t>((packed >> (16 * i)) & 0xffffu);
+            const uint32_t limb = static_cast<uint32_t>((packed >> (BITS_PER_ELM * i)) & ELM_MASK);
             out[i] = F(limb);
         }
         return out;

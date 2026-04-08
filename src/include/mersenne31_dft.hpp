@@ -13,7 +13,7 @@ namespace p3_dft {
 
 class Mersenne31Complex {
 public:
-    static constexpr size_t TWO_ADICITY = 31;
+    static constexpr size_t TWO_ADICITY = 32;
 
     Mersenne31Complex()
         : real_(p3_field::Mersenne31::zero_val()), imag_(p3_field::Mersenne31::zero_val()) {}
@@ -93,10 +93,11 @@ public:
         if (bits > TWO_ADICITY) {
             throw std::invalid_argument("bits exceeds TWO_ADICITY (31) for Mersenne31Complex");
         }
-        // From Plonky3's `complex.rs`: a primitive 2^31-th root in Mersenne31(i).
+        // From Plonky3's mersenne_31.rs EXT_TWO_ADIC_GENERATORS[32]:
+        // a primitive 2^32-th root of unity in Complex<Mersenne31>.
         const Mersenne31Complex base(
-            p3_field::Mersenne31(static_cast<uint32_t>(311014874u)),
-            p3_field::Mersenne31(static_cast<uint32_t>(1584694829u)));
+            p3_field::Mersenne31(static_cast<uint32_t>(1166849849u)),
+            p3_field::Mersenne31(static_cast<uint32_t>(1117296306u)));
         return base.exp_power_of_2(TWO_ADICITY - bits);
     }
 

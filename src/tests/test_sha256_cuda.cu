@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 
+using p3_cuda_compat::DeviceBuffer;
 using namespace p3_symmetric;
 
 namespace {
@@ -39,14 +40,26 @@ TEST(Sha256Cuda, KernelLaunchMatchesHostResult) {
     const Sha256 sha;
     const auto expected = sha.hash_iter(left.data(), left.size());
 
-    uint8_t* d_left = nullptr;
-    uint8_t* d_right = nullptr;
-    uint8_t* d_out = nullptr;
+    DeviceBuffer buf_left;
+    DeviceBuffer buf_right;
+    DeviceBuffer buf_out;
 
     try {
-        P3_CUDA_CHECK(cudaMalloc(&d_left, 32));
-        P3_CUDA_CHECK(cudaMalloc(&d_right, 32));
-        P3_CUDA_CHECK(cudaMalloc(&d_out, 32));
+        void* p_left = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_left, 32));
+        buf_left.reset(p_left);
+
+        void* p_right = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_right, 32));
+        buf_right.reset(p_right);
+
+        void* p_out = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_out, 32));
+        buf_out.reset(p_out);
+
+        auto* d_left = static_cast<uint8_t*>(buf_left.get());
+        auto* d_right = static_cast<uint8_t*>(buf_right.get());
+        auto* d_out = static_cast<uint8_t*>(buf_out.get());
 
         P3_CUDA_CHECK(cudaMemcpy(d_left, left.data(), 32, cudaMemcpyHostToDevice));
         P3_CUDA_CHECK(cudaMemcpy(d_right, right.data(), 32, cudaMemcpyHostToDevice));
@@ -58,18 +71,11 @@ TEST(Sha256Cuda, KernelLaunchMatchesHostResult) {
         std::array<uint8_t, 32> got{};
         P3_CUDA_CHECK(cudaMemcpy(got.data(), d_out, 32, cudaMemcpyDeviceToHost));
         EXPECT_EQ(got, expected);
-    } catch (const std::runtime_error& e) {        
+    } catch (const std::runtime_error& e) {
         const std::string msg = e.what();
-        if (d_left) cudaFree(d_left);
-        if (d_right) cudaFree(d_right);
-        if (d_out) cudaFree(d_out);
-        if (msg.find("unsupported toolchain") != std::string::npos) {            
+        if (msg.find("unsupported toolchain") != std::string::npos) {
             GTEST_SKIP() << "CUDA driver/toolchain mismatch: " << msg;
-        }        
+        }
         throw;
     }
-
-    if (d_left) P3_CUDA_CHECK(cudaFree(d_left));
-    if (d_right) P3_CUDA_CHECK(cudaFree(d_right));
-    if (d_out) P3_CUDA_CHECK(cudaFree(d_out));
 }

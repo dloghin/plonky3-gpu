@@ -17,6 +17,10 @@ public:
     static_assert(WIDTH == 16, "MonolithMdsMatrixMersenne31 currently supports WIDTH=16 only");
 
     P3_HOST_DEVICE void permute_mut(std::array<Mersenne31, WIDTH>& state) const {
+        constexpr std::array<uint32_t, 16> kCirculant = {
+            61402u, 17845u, 26798u, 59689u, 12021u, 40901u, 41351u, 27521u,
+            56951u, 12034u, 53865u, 43244u, 7454u, 33823u, 28750u, 1108u,
+        };
         std::array<Mersenne31, WIDTH> out{};
         for (size_t i = 0; i < WIDTH; ++i) {
             uint64_t acc = 0;
@@ -37,10 +41,6 @@ public:
     }
 
 private:
-    static constexpr std::array<uint32_t, 16> kCirculant = {
-        61402u, 17845u, 26798u, 59689u, 12021u, 40901u, 41351u, 27521u,
-        56951u, 12034u, 53865u, 43244u, 7454u, 33823u, 28750u, 1108u,
-    };
 };
 
 template <size_t WIDTH = 16, size_t NUM_FULL_ROUNDS = 5>
@@ -62,7 +62,7 @@ public:
             bars(state);
             bricks(state);
             concrete(state);
-            add_round_constants(state, round_constants()[r]);
+            add_round_constants(state, r);
         }
         bars(state);
         bricks(state);
@@ -75,17 +75,21 @@ public:
         return out;
     }
 
-    P3_HOST_DEVICE static const RoundConstants& round_constants() { return k_round_constants_; }
+    P3_HOST static const RoundConstants& round_constants() {
+        static const RoundConstants constants = []() {
+            RoundConstants out{};
+            constexpr auto round_constants_u32_vals = round_constants_u32();
+            for (size_t r = 0; r < NUM_FULL_ROUNDS; ++r) {
+                for (size_t i = 0; i < WIDTH; ++i) {
+                    out[r][i] = Mersenne31(round_constants_u32_vals[r][i]);
+                }
+            }
+            return out;
+        }();
+        return constants;
+    }
 
 private:
-    static constexpr RoundConstants k_round_constants_ = {{
-        {{Mersenne31(1033436816u), Mersenne31(348863691u), Mersenne31(2081103763u), Mersenne31(994924237u), Mersenne31(64925253u), Mersenne31(677331122u), Mersenne31(1735246508u), Mersenne31(26616398u), Mersenne31(1538025930u), Mersenne31(1710098735u), Mersenne31(995978747u), Mersenne31(1336376181u), Mersenne31(2051827886u), Mersenne31(447361871u), Mersenne31(1829769948u), Mersenne31(718914942u)}},
-        {{Mersenne31(474392908u), Mersenne31(549190350u), Mersenne31(140657697u), Mersenne31(642927328u), Mersenne31(325988066u), Mersenne31(2087527882u), Mersenne31(1429283917u), Mersenne31(537644603u), Mersenne31(2072852575u), Mersenne31(707584548u), Mersenne31(482862777u), Mersenne31(829305883u), Mersenne31(1016581262u), Mersenne31(148132697u), Mersenne31(397768408u), Mersenne31(50011713u)}},
-        {{Mersenne31(897025585u), Mersenne31(597857797u), Mersenne31(389941735u), Mersenne31(1101342757u), Mersenne31(1318622762u), Mersenne31(1954712215u), Mersenne31(1789281623u), Mersenne31(529033351u), Mersenne31(913202249u), Mersenne31(1707514131u), Mersenne31(616819674u), Mersenne31(197082924u), Mersenne31(1180366701u), Mersenne31(241453365u), Mersenne31(1700285697u), Mersenne31(1755996717u)}},
-        {{Mersenne31(1917698553u), Mersenne31(1252360787u), Mersenne31(1273610561u), Mersenne31(212500927u), Mersenne31(1268578595u), Mersenne31(1403584286u), Mersenne31(612974258u), Mersenne31(1024938353u), Mersenne31(1546879084u), Mersenne31(1752198737u), Mersenne31(757476618u), Mersenne31(916242693u), Mersenne31(1739315286u), Mersenne31(1012279900u), Mersenne31(1254788910u), Mersenne31(1865871347u)}},
-        {{Mersenne31(534908981u), Mersenne31(1994856941u), Mersenne31(1598293579u), Mersenne31(510970053u), Mersenne31(1868253334u), Mersenne31(1194878847u), Mersenne31(360986778u), Mersenne31(1303396410u), Mersenne31(337495830u), Mersenne31(1233499389u), Mersenne31(1058246115u), Mersenne31(1413610001u), Mersenne31(799568848u), Mersenne31(48161847u), Mersenne31(1339121921u), Mersenne31(1110912837u)}},
-    }};
-
     P3_HOST_DEVICE static uint8_t s_box(uint8_t y) {
         const uint8_t y_rot_1 = static_cast<uint8_t>((y << 1) | (y >> 7));
         const uint8_t y_rot_2 = static_cast<uint8_t>((y << 2) | (y >> 6));
@@ -128,13 +132,22 @@ private:
         }
     }
 
-    P3_HOST_DEVICE static void add_round_constants(
-        State& state,
-        const std::array<Mersenne31, WIDTH>& round_constants
-    ) {
+    P3_HOST_DEVICE static void add_round_constants(State& state, size_t round_idx) {
+        constexpr auto round_constants_u32_vals = round_constants_u32();
         for (size_t i = 0; i < WIDTH; ++i) {
-            state[i] += round_constants[i];
+            state[i] += Mersenne31(round_constants_u32_vals[round_idx][i]);
         }
+    }
+
+    P3_HOST_DEVICE static constexpr std::array<std::array<uint32_t, WIDTH>, NUM_FULL_ROUNDS>
+    round_constants_u32() {
+        return {{
+            {{1033436816u, 348863691u, 2081103763u, 994924237u, 64925253u, 677331122u, 1735246508u, 26616398u, 1538025930u, 1710098735u, 995978747u, 1336376181u, 2051827886u, 447361871u, 1829769948u, 718914942u}},
+            {{474392908u, 549190350u, 140657697u, 642927328u, 325988066u, 2087527882u, 1429283917u, 537644603u, 2072852575u, 707584548u, 482862777u, 829305883u, 1016581262u, 148132697u, 397768408u, 50011713u}},
+            {{897025585u, 597857797u, 389941735u, 1101342757u, 1318622762u, 1954712215u, 1789281623u, 529033351u, 913202249u, 1707514131u, 616819674u, 197082924u, 1180366701u, 241453365u, 1700285697u, 1755996717u}},
+            {{1917698553u, 1252360787u, 1273610561u, 212500927u, 1268578595u, 1403584286u, 612974258u, 1024938353u, 1546879084u, 1752198737u, 757476618u, 916242693u, 1739315286u, 1012279900u, 1254788910u, 1865871347u}},
+            {{534908981u, 1994856941u, 1598293579u, 510970053u, 1868253334u, 1194878847u, 360986778u, 1303396410u, 337495830u, 1233499389u, 1058246115u, 1413610001u, 799568848u, 48161847u, 1339121921u, 1110912837u}},
+        }};
     }
 
     Mds mds_{};

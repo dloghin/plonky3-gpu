@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 
+using p3_cuda_compat::DeviceBuffer;
 using monolith::MonolithMersenne31;
 using p3_field::Mersenne31;
 
@@ -60,12 +61,20 @@ TEST(MonolithCuda, KernelLaunchMatchesHostPermutation) {
         expected_words[i] = expected[i].value();
     }
 
-    uint32_t* d_in = nullptr;
-    uint32_t* d_out = nullptr;
+    DeviceBuffer buf_in;
+    DeviceBuffer buf_out;
 
     try {
-        P3_CUDA_CHECK(cudaMalloc(&d_in, sizeof(uint32_t) * in_words.size()));
-        P3_CUDA_CHECK(cudaMalloc(&d_out, sizeof(uint32_t) * got_words.size()));
+        void* p_in = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_in, sizeof(uint32_t) * in_words.size()));
+        buf_in.reset(p_in);
+
+        void* p_out = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_out, sizeof(uint32_t) * got_words.size()));
+        buf_out.reset(p_out);
+
+        auto* d_in = static_cast<uint32_t*>(buf_in.get());
+        auto* d_out = static_cast<uint32_t*>(buf_out.get());
 
         P3_CUDA_CHECK(cudaMemcpy(
             d_in, in_words.data(), sizeof(uint32_t) * in_words.size(), cudaMemcpyHostToDevice));
@@ -80,16 +89,11 @@ TEST(MonolithCuda, KernelLaunchMatchesHostPermutation) {
         EXPECT_EQ(got_words, expected_words);
     } catch (const std::runtime_error& e) {
         const std::string msg = e.what();
-        if (d_in) cudaFree(d_in);
-        if (d_out) cudaFree(d_out);
         if (msg.find("unsupported toolchain") != std::string::npos) {
             GTEST_SKIP() << "CUDA driver/toolchain mismatch: " << msg;
         }
         throw;
     }
-
-    if (d_in) P3_CUDA_CHECK(cudaFree(d_in));
-    if (d_out) P3_CUDA_CHECK(cudaFree(d_out));
 }
 
 TEST(MonolithCuda, KernelMatchesRustReferenceVector) {
@@ -113,12 +117,20 @@ TEST(MonolithCuda, KernelMatchesRustReferenceVector) {
 
     std::array<uint32_t, 16> got_words{};
 
-    uint32_t* d_in = nullptr;
-    uint32_t* d_out = nullptr;
+    DeviceBuffer buf_in;
+    DeviceBuffer buf_out;
 
     try {
-        P3_CUDA_CHECK(cudaMalloc(&d_in, sizeof(uint32_t) * in_words.size()));
-        P3_CUDA_CHECK(cudaMalloc(&d_out, sizeof(uint32_t) * got_words.size()));
+        void* p_in = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_in, sizeof(uint32_t) * in_words.size()));
+        buf_in.reset(p_in);
+
+        void* p_out = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_out, sizeof(uint32_t) * got_words.size()));
+        buf_out.reset(p_out);
+
+        auto* d_in = static_cast<uint32_t*>(buf_in.get());
+        auto* d_out = static_cast<uint32_t*>(buf_out.get());
 
         P3_CUDA_CHECK(cudaMemcpy(
             d_in, in_words.data(), sizeof(uint32_t) * in_words.size(), cudaMemcpyHostToDevice));
@@ -133,14 +145,9 @@ TEST(MonolithCuda, KernelMatchesRustReferenceVector) {
         EXPECT_EQ(got_words, expected_words);
     } catch (const std::runtime_error& e) {
         const std::string msg = e.what();
-        if (d_in) cudaFree(d_in);
-        if (d_out) cudaFree(d_out);
         if (msg.find("unsupported toolchain") != std::string::npos) {
             GTEST_SKIP() << "CUDA driver/toolchain mismatch: " << msg;
         }
         throw;
     }
-
-    if (d_in) P3_CUDA_CHECK(cudaFree(d_in));
-    if (d_out) P3_CUDA_CHECK(cudaFree(d_out));
 }

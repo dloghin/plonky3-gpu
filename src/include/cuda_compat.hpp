@@ -57,6 +57,7 @@
 // CUDA error checking macro (host-only)
 #if P3_CUDA_ENABLED
     #include <cuda_runtime.h>
+    #include <memory>
     #include <stdexcept>
     #include <string>
 
@@ -69,6 +70,20 @@ inline void throw_if_cuda_error(cudaError_t e, const char* file, int line) {
             std::to_string(line) + ": " + cudaGetErrorString(e));
     }
 }
+
+/**
+ * @brief Deleter for device memory allocated with cudaMalloc; ignores cudaFree errors (cleanup).
+ */
+struct CudaFreeDeleter {
+    void operator()(void* p) const noexcept {
+        if (p) {
+            (void)cudaFree(p);
+        }
+    }
+};
+
+/** Owns a cudaMalloc allocation; frees on destruction (both buffers attempted on partial failure). */
+using DeviceBuffer = std::unique_ptr<void, CudaFreeDeleter>;
 
 }  // namespace p3_cuda_compat
 

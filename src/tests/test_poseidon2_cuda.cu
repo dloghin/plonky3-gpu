@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+using p3_cuda_compat::DeviceBuffer;
 using p3_field::BabyBear;
 using poseidon2::Poseidon2Cuda;
 using poseidon2::Poseidon2SpongeCuda;
@@ -63,11 +64,20 @@ TEST(Poseidon2Cuda, PermuteKernelMatchesHost) {
     auto expected = host_state;
     poseidon.permute(expected.data());
 
-    Poseidon* d_poseidon = nullptr;
-    F* d_states = nullptr;
+    DeviceBuffer buf_poseidon;
+    DeviceBuffer buf_states;
     try {
-        P3_CUDA_CHECK(cudaMalloc(&d_poseidon, sizeof(Poseidon)));
-        P3_CUDA_CHECK(cudaMalloc(&d_states, sizeof(F) * WIDTH));
+        void* p_poseidon = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_poseidon, sizeof(Poseidon)));
+        buf_poseidon.reset(p_poseidon);
+
+        void* p_states = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_states, sizeof(F) * WIDTH));
+        buf_states.reset(p_states);
+
+        auto* d_poseidon = static_cast<Poseidon*>(buf_poseidon.get());
+        auto* d_states = static_cast<F*>(buf_states.get());
+
         P3_CUDA_CHECK(cudaMemcpy(d_poseidon, &poseidon, sizeof(Poseidon), cudaMemcpyHostToDevice));
         P3_CUDA_CHECK(cudaMemcpy(d_states, host_state.data(), sizeof(F) * WIDTH, cudaMemcpyHostToDevice));
 
@@ -80,16 +90,11 @@ TEST(Poseidon2Cuda, PermuteKernelMatchesHost) {
         EXPECT_EQ(got, expected);
     } catch (const std::runtime_error& e) {
         const std::string msg = e.what();
-        if (d_poseidon) cudaFree(d_poseidon);
-        if (d_states) cudaFree(d_states);
         if (msg.find("unsupported toolchain") != std::string::npos) {
             GTEST_SKIP() << "CUDA driver/toolchain mismatch: " << msg;
         }
         throw;
     }
-
-    if (d_poseidon) P3_CUDA_CHECK(cudaFree(d_poseidon));
-    if (d_states) P3_CUDA_CHECK(cudaFree(d_states));
 }
 
 TEST(Poseidon2Cuda, HashKernelMatchesHost) {
@@ -107,13 +112,26 @@ TEST(Poseidon2Cuda, HashKernelMatchesHost) {
     sponge.hash(inputs.data(), input_len, expected.data());
     sponge.hash(inputs.data() + input_len, input_len, expected.data() + RATE);
 
-    Sponge* d_sponge = nullptr;
-    F* d_inputs = nullptr;
-    F* d_outputs = nullptr;
+    DeviceBuffer buf_sponge;
+    DeviceBuffer buf_inputs;
+    DeviceBuffer buf_outputs;
     try {
-        P3_CUDA_CHECK(cudaMalloc(&d_sponge, sizeof(Sponge)));
-        P3_CUDA_CHECK(cudaMalloc(&d_inputs, sizeof(F) * inputs.size()));
-        P3_CUDA_CHECK(cudaMalloc(&d_outputs, sizeof(F) * expected.size()));
+        void* p_sponge = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_sponge, sizeof(Sponge)));
+        buf_sponge.reset(p_sponge);
+
+        void* p_inputs = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_inputs, sizeof(F) * inputs.size()));
+        buf_inputs.reset(p_inputs);
+
+        void* p_outputs = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_outputs, sizeof(F) * expected.size()));
+        buf_outputs.reset(p_outputs);
+
+        auto* d_sponge = static_cast<Sponge*>(buf_sponge.get());
+        auto* d_inputs = static_cast<F*>(buf_inputs.get());
+        auto* d_outputs = static_cast<F*>(buf_outputs.get());
+
         P3_CUDA_CHECK(cudaMemcpy(d_sponge, &sponge, sizeof(Sponge), cudaMemcpyHostToDevice));
         P3_CUDA_CHECK(cudaMemcpy(d_inputs, inputs.data(), sizeof(F) * inputs.size(), cudaMemcpyHostToDevice));
 
@@ -127,17 +145,10 @@ TEST(Poseidon2Cuda, HashKernelMatchesHost) {
         EXPECT_EQ(got, expected);
     } catch (const std::runtime_error& e) {
         const std::string msg = e.what();
-        if (d_sponge) cudaFree(d_sponge);
-        if (d_inputs) cudaFree(d_inputs);
-        if (d_outputs) cudaFree(d_outputs);
         if (msg.find("unsupported toolchain") != std::string::npos) {
             GTEST_SKIP() << "CUDA driver/toolchain mismatch: " << msg;
         }
         throw;
     }
-
-    if (d_sponge) P3_CUDA_CHECK(cudaFree(d_sponge));
-    if (d_inputs) P3_CUDA_CHECK(cudaFree(d_inputs));
-    if (d_outputs) P3_CUDA_CHECK(cudaFree(d_outputs));
 }
 

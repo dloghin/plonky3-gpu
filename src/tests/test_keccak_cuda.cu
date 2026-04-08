@@ -10,22 +10,13 @@
 
 #include <array>
 #include <cstdint>
-#include <memory>
 #include <stdexcept>
 #include <string>
 
 using namespace p3_symmetric;
+using p3_cuda_compat::DeviceBuffer;
 
 namespace {
-
-struct CudaFreeDeleter {
-    void operator()(void* p) const noexcept {
-        if (p) {
-            (void)cudaFree(p);
-        }
-    }
-};
-using DeviceBuffer = std::unique_ptr<void, CudaFreeDeleter>;
 
 P3_GLOBAL void keccak_f_kernel(const uint64_t* in_state, uint64_t* out_state) {
     uint64_t st[KECCAK_STATE_LANES]{};

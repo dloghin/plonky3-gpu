@@ -133,6 +133,11 @@ private:
 template<typename T>
 class VerticallyStackedMatrices : public Matrix<T> {
 public:
+    // Performance note:
+    // - get_unchecked/get do a row-to-submatrix translation via locate_row() on each call.
+    // - That lookup is O(log num_stacked_matrices) because it uses binary search.
+    // For row-wise processing, prefer row_ptr(r) when available, since it performs
+    // the row lookup once and then allows direct contiguous access to that row.
     explicit VerticallyStackedMatrices(std::vector<std::reference_wrapper<const Matrix<T>>> matrices)
         : matrices_(std::move(matrices)), width_(0), height_(0) {
         if (matrices_.empty()) {
@@ -154,6 +159,8 @@ public:
     size_t height() const override { return height_; }
 
     T get_unchecked(size_t r, size_t c) const override {
+        // This path intentionally favors generic element-wise access semantics.
+        // It performs locate_row() per element access; see class performance note.
         const auto [matrix_idx, local_row] = locate_row(r);
         return matrices_[matrix_idx].get().get_unchecked(local_row, c);
     }

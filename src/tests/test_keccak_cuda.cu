@@ -10,12 +10,22 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
 using namespace p3_symmetric;
 
 namespace {
+
+struct CudaFreeDeleter {
+    void operator()(void* p) const noexcept {
+        if (p) {
+            (void)cudaFree(p);
+        }
+    }
+};
+using DeviceBuffer = std::unique_ptr<void, CudaFreeDeleter>;
 
 P3_GLOBAL void keccak_f_kernel(const uint64_t* in_state, uint64_t* out_state) {
     uint64_t st[KECCAK_STATE_LANES]{};
@@ -48,35 +58,38 @@ TEST(KeccakCuda, KernelLaunchMatchesHostPermutation) {
     KeccakF host_perm;
     host_perm.permute_mut(expected);
 
-    uint64_t* d_in = nullptr;
-    uint64_t* d_out = nullptr;
+    DeviceBuffer d_in;
+    DeviceBuffer d_out;
 
     try {
-        P3_CUDA_CHECK(cudaMalloc(&d_in, sizeof(uint64_t) * KECCAK_STATE_LANES));
-        P3_CUDA_CHECK(cudaMalloc(&d_out, sizeof(uint64_t) * KECCAK_STATE_LANES));
+        void* p_in = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_in, sizeof(uint64_t) * KECCAK_STATE_LANES));
+        d_in.reset(p_in);
+
+        void* p_out = nullptr;
+        P3_CUDA_CHECK(cudaMalloc(&p_out, sizeof(uint64_t) * KECCAK_STATE_LANES));
+        d_out.reset(p_out);
+
+        auto* d_in_u64 = static_cast<uint64_t*>(d_in.get());
+        auto* d_out_u64 = static_cast<uint64_t*>(d_out.get());
 
         P3_CUDA_CHECK(cudaMemcpy(
-            d_in, in_state.data(), sizeof(uint64_t) * KECCAK_STATE_LANES, cudaMemcpyHostToDevice));
+            d_in_u64, in_state.data(), sizeof(uint64_t) * KECCAK_STATE_LANES, cudaMemcpyHostToDevice));
 
-        keccak_f_kernel<<<1, 1>>>(d_in, d_out);
+        keccak_f_kernel<<<1, 1>>>(d_in_u64, d_out_u64);
         P3_CUDA_CHECK(cudaGetLastError());
         P3_CUDA_CHECK(cudaDeviceSynchronize());
 
         std::array<uint64_t, KECCAK_STATE_LANES> got{};
         P3_CUDA_CHECK(cudaMemcpy(
-            got.data(), d_out, sizeof(uint64_t) * KECCAK_STATE_LANES, cudaMemcpyDeviceToHost));
+            got.data(), d_out_u64, sizeof(uint64_t) * KECCAK_STATE_LANES, cudaMemcpyDeviceToHost));
 
         EXPECT_EQ(got, expected);
     } catch (const std::runtime_error& e) {
         const std::string msg = e.what();
-        if (d_in) cudaFree(d_in);
-        if (d_out) cudaFree(d_out);
         if (msg.find("unsupported toolchain") != std::string::npos) {
             GTEST_SKIP() << "CUDA driver/toolchain mismatch: " << msg;
         }
         throw;
     }
-
-    if (d_in) P3_CUDA_CHECK(cudaFree(d_in));
-    if (d_out) P3_CUDA_CHECK(cudaFree(d_out));
 }

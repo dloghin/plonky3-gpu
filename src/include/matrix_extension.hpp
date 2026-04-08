@@ -17,10 +17,11 @@ RowMajorMatrix<F> flatten_to_base(const Matrix<p3_field::BinomialExtensionField<
 
     std::vector<F> base_values(h * base_w);
     for (size_t r = 0; r < h; ++r) {
+        F* row_out = &base_values[r * base_w];
         for (size_t c = 0; c < ext_w; ++c) {
             const auto value = ext_matrix.get_unchecked(r, c);
             for (size_t k = 0; k < D; ++k) {
-                base_values[r * base_w + c * D + k] = value.coeffs[k];
+                row_out[c * D + k] = value.coeffs[k];
             }
         }
     }

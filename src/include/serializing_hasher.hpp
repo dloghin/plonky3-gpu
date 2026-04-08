@@ -35,12 +35,23 @@ public:
     }
 
     Hash<F, OUT> hash_iter_slices(const std::vector<std::vector<F>>& slices) const {
-        std::vector<F> flat;
-        size_t total = 0;
-        for (const auto& s : slices) total += s.size();
-        flat.reserve(total);
-        for (const auto& s : slices) flat.insert(flat.end(), s.begin(), s.end());
-        return hash_iter(flat);
+        std::vector<uint8_t> bytes;
+        size_t total_elems = 0;
+        for (const auto& s : slices) {
+            total_elems += s.size();
+        }
+        bytes.reserve(total_elems * byte_width);
+    
+        for (const auto& s : slices) {
+            for (const auto& v : s) {
+                const uint64_t x = v.as_canonical_u64();
+                for (size_t i = 0; i < byte_width; ++i) {
+                    bytes.push_back(static_cast<uint8_t>((x >> (8 * i)) & 0xffu));
+                }
+            }
+        }
+        const auto digest = inner_.hash_iter(bytes);
+        return decode_to_field(digest);
     }
 
 private:

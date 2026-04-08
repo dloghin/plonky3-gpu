@@ -245,16 +245,12 @@ private:
     {
         const size_t h = input.height();
         const size_t w = input.width();
-        std::vector<p3_field::Mersenne31> out;
-        out.reserve(h * w * 2);
+        std::vector<p3_field::Mersenne31> out(h * 2 * w);
         for (size_t r = 0; r < h; ++r) {
             for (size_t c = 0; c < w; ++c) {
-                const auto v = input.get_unchecked(r, c);
-                out.push_back(v.real());
-            }
-            for (size_t c = 0; c < w; ++c) {
-                const auto v = input.get_unchecked(r, c);
-                out.push_back(v.imag());
+                const auto& v = input.get_unchecked(r, c);
+                out[(r * 2) * w + c] = v.real();
+                out[(r * 2 + 1) * w + c] = v.imag();
             }
         }
         return p3_matrix::RowMajorMatrix<p3_field::Mersenne31>(std::move(out), w);

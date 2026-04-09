@@ -4,6 +4,7 @@
 #include "extension_field.hpp"
 #include "matrix.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 #include <vector>
 

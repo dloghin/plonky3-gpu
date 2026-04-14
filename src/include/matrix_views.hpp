@@ -24,7 +24,11 @@ public:
   size_t height() const override { return mapped_height_; }
 
   T get_unchecked(size_t r, size_t c) const override {
-    return inner_.get_unchecked(row_mapper_(r), c);
+    size_t mapped_r = row_mapper_(r);
+    if (const T* row = inner_.row_ptr(mapped_r)) {
+      return row[c];
+    }
+    return inner_.get_unchecked(mapped_r, c);
   }
 
   const T *row_ptr(size_t r) const override {
@@ -56,7 +60,11 @@ public:
   size_t height() const override { return height_; }
 
   T get_unchecked(size_t r, size_t c) const override {
-    return inner_.get_unchecked(r * stride_ + offset_, c);
+    size_t inner_r = r * stride_ + offset_;
+    if (const T* row = inner_.row_ptr(inner_r)) {
+      return row[c];
+    }
+    return inner_.get_unchecked(inner_r, c);
   }
 
   const T *row_ptr(size_t r) const override {
@@ -91,7 +99,11 @@ public:
   size_t height() const override { return inner_.height(); }
 
   T get_unchecked(size_t r, size_t c) const override {
-    return inner_.get_unchecked(p3_util::reverse_bits_len(r, log_height_), c);
+    size_t rev_r = p3_util::reverse_bits_len(r, log_height_);
+    if (const T *row = inner_.row_ptr(rev_r)) {
+      return row[c];
+    }
+    return inner_.get_unchecked(rev_r, c);
   }
 
   const T *row_ptr(size_t r) const override {
@@ -120,7 +132,7 @@ public:
   size_t height() const override { return inner_.height(); }
 
   T get_unchecked(size_t r, size_t c) const override {
-    if (const T* row = inner_.row_ptr(r)) {
+    if (const T *row = inner_.row_ptr(r)) {
       return row[c];
     }
     return inner_.get_unchecked(r, c);

@@ -100,6 +100,9 @@ public:
     size_t height() const override { return inner_.height(); }
 
     Ext get_unchecked(size_t r, size_t c) const override {
+        if (const F* row = inner_.row_ptr(r)) {
+            return reinterpret_cast<const Ext*>(row)[c];
+        }
         std::array<F, D> coeffs{};
         for (size_t k = 0; k < D; ++k) {
             coeffs[k] = inner_.get_unchecked(r, c * D + k);

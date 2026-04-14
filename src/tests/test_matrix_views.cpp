@@ -147,3 +147,100 @@ TEST(MatrixViewsTest, ExtensionFlattenAndUnflattenRoundTrip) {
     }
 }
 
+TEST(MatrixViewsTest, FlattenedViewRowPtrZeroCopy) {
+    using Base = p3_field::BabyBear;
+    using Ext = p3_field::BabyBear4;
+
+    std::vector<Ext> ext_values = {
+        Ext({Base(1), Base(2), Base(3), Base(4)}),
+        Ext({Base(5), Base(6), Base(7), Base(8)}),
+        Ext({Base(9), Base(10), Base(11), Base(12)}),
+        Ext({Base(13), Base(14), Base(15), Base(16)})
+    };
+    RowMajorMatrix<Ext> ext_matrix(ext_values, 2);
+
+    auto flattened = flatten_to_base<Base, 4, 11>(ext_matrix);
+
+    const Base* row0 = flattened.row_ptr(0);
+    ASSERT_NE(row0, nullptr);
+    for (size_t c = 0; c < flattened.width(); ++c) {
+        EXPECT_EQ(row0[c], flattened.get(0, c));
+    }
+
+    const Base* row1 = flattened.row_ptr(1);
+    ASSERT_NE(row1, nullptr);
+    EXPECT_EQ(row1[0], Base(9));
+    EXPECT_EQ(row1[7], Base(16));
+
+    // row_ptr must alias the inner matrix's storage — no copy
+    EXPECT_EQ(row0, reinterpret_cast<const Base*>(ext_matrix.row_ptr(0)));
+}
+
+TEST(MatrixViewsTest, UnflattenedViewRowPtrZeroCopy) {
+    using Base = p3_field::BabyBear;
+    using Ext = p3_field::BabyBear4;
+
+    std::vector<Base> base_values = {
+        Base(1), Base(2), Base(3), Base(4), Base(5), Base(6), Base(7), Base(8),
+        Base(9), Base(10), Base(11), Base(12), Base(13), Base(14), Base(15), Base(16)
+    };
+    RowMajorMatrix<Base> base_matrix(base_values, 8);
+
+    auto unflattened = unflatten_from_base<Base, 4, 11>(base_matrix);
+    EXPECT_EQ(unflattened.width(), 2);
+    EXPECT_EQ(unflattened.height(), 2);
+
+    const Ext* row0 = unflattened.row_ptr(0);
+    ASSERT_NE(row0, nullptr);
+    EXPECT_EQ(row0[0], Ext({Base(1), Base(2), Base(3), Base(4)}));
+    EXPECT_EQ(row0[1], Ext({Base(5), Base(6), Base(7), Base(8)}));
+
+    // row_ptr must alias the inner matrix's storage — no copy
+    EXPECT_EQ(reinterpret_cast<const Base*>(row0), base_matrix.row_ptr(0));
+}
+
+TEST(MatrixViewsTest, FlattenedViewToRowMajorMatrix) {
+    using Base = p3_field::BabyBear;
+    using Ext = p3_field::BabyBear4;
+
+    std::vector<Ext> ext_values = {
+        Ext({Base(10), Base(20), Base(30), Base(40)}),
+        Ext({Base(50), Base(60), Base(70), Base(80)})
+    };
+    RowMajorMatrix<Ext> ext_matrix(ext_values, 2);
+
+    auto view = flatten_to_base<Base, 4, 11>(ext_matrix);
+    auto materialized = view.to_row_major_matrix();
+
+    EXPECT_EQ(materialized.width(), 8);
+    EXPECT_EQ(materialized.height(), 1);
+    for (size_t c = 0; c < 8; ++c) {
+        EXPECT_EQ(materialized.get(0, c), view.get(0, c));
+    }
+}
+
+TEST(MatrixViewsTest, UnflattenedViewToRowMajorMatrix) {
+    using Base = p3_field::BabyBear;
+
+    std::vector<Base> base_values = {
+        Base(1), Base(2), Base(3), Base(4), Base(5), Base(6), Base(7), Base(8)
+    };
+    RowMajorMatrix<Base> base_matrix(base_values, 8);
+
+    auto view = unflatten_from_base<Base, 4, 11>(base_matrix);
+    auto materialized = view.to_row_major_matrix();
+
+    EXPECT_EQ(materialized.width(), 2);
+    EXPECT_EQ(materialized.height(), 1);
+    for (size_t c = 0; c < 2; ++c) {
+        EXPECT_EQ(materialized.get(0, c), view.get(0, c));
+    }
+}
+
+TEST(MatrixViewsTest, UnflattenWidthNotDivisibleThrows) {
+    using Base = p3_field::BabyBear;
+
+    RowMajorMatrix<Base> bad_matrix({Base(1), Base(2), Base(3)}, 3);
+    EXPECT_THROW((unflatten_from_base<Base, 4, 11>(bad_matrix)), std::invalid_argument);
+}
+

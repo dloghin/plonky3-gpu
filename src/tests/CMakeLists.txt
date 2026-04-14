@@ -37,6 +37,8 @@ add_plonky3_test(dense_matrix_tests test_dense_matrix.cpp)
 
 add_plonky3_test(matrix_util_tests test_matrix_util.cpp)
 
+add_plonky3_test(matrix_views_tests test_matrix_views.cpp)
+
 # -- Util tests --
 add_plonky3_test(util_tests test_util.cpp)
 

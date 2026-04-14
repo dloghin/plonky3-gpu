@@ -120,6 +120,9 @@ public:
   size_t height() const override { return inner_.height(); }
 
   T get_unchecked(size_t r, size_t c) const override {
+    if (const T* row = inner_.row_ptr(r)) {
+      return row[c];
+    }
     return inner_.get_unchecked(r, c);
   }
 

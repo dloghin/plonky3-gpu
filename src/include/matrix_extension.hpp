@@ -21,7 +21,15 @@ public:
     F get_unchecked(size_t r, size_t c) const override {
         const size_t ext_col = c / D;
         const size_t coeff_idx = c % D;
+        if (const Ext* row = inner_.row_ptr(r)) {
+            return row[ext_col].coeffs[coeff_idx];
+        }
         return inner_.get_unchecked(r, ext_col).coeffs[coeff_idx];
+    }
+
+    const F* row_ptr(size_t r) const override {
+        const Ext* ptr = inner_.row_ptr(r);
+        return ptr ? reinterpret_cast<const F*>(ptr) : nullptr;
     }
 
 private:

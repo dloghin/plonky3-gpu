@@ -140,6 +140,10 @@ TEST(MatrixViewsTest, ExtensionFlattenAndUnflattenRoundTrip) {
     auto roundtrip = unflatten_from_base<Base, 4, 11>(flattened);
     EXPECT_EQ(roundtrip.width(), ext_matrix.width());
     EXPECT_EQ(roundtrip.height(), ext_matrix.height());
-    EXPECT_EQ(roundtrip.values, ext_matrix.values);
+    for (size_t r = 0; r < ext_matrix.height(); ++r) {
+        for (size_t c = 0; c < ext_matrix.width(); ++c) {
+            EXPECT_EQ(roundtrip.get(r, c), ext_matrix.get(r, c));
+        }
+    }
 }
 

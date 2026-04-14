@@ -1,59 +1,70 @@
 #pragma once
 
-#include "dense_matrix.hpp"
 #include "extension_field.hpp"
 #include "matrix.hpp"
 
-#include <algorithm>
+#include <array>
 #include <stdexcept>
-#include <vector>
 
 namespace p3_matrix {
 
 template<typename F, size_t D, uint32_t W>
-RowMajorMatrix<F> flatten_to_base(const Matrix<p3_field::BinomialExtensionField<F, D, W>>& ext_matrix) {
-    const size_t h = ext_matrix.height();
-    const size_t ext_w = ext_matrix.width();
-    const size_t base_w = ext_w * D;
+class FlattenedMatrixView : public Matrix<F> {
+public:
+    using Ext = p3_field::BinomialExtensionField<F, D, W>;
 
-    std::vector<F> base_values(h * base_w);
-    for (size_t r = 0; r < h; ++r) {
-        F* row_out = &base_values[r * base_w];
-        for (size_t c = 0; c < ext_w; ++c) {
-            const auto value = ext_matrix.get_unchecked(r, c);
-            for (size_t k = 0; k < D; ++k) {
-                row_out[c * D + k] = value.coeffs[k];
-            }
+    explicit FlattenedMatrixView(const Matrix<Ext>& inner) : inner_(inner) {}
+
+    size_t width() const override { return inner_.width() * D; }
+    size_t height() const override { return inner_.height(); }
+
+    F get_unchecked(size_t r, size_t c) const override {
+        const size_t ext_col = c / D;
+        const size_t coeff_idx = c % D;
+        return inner_.get_unchecked(r, ext_col).coeffs[coeff_idx];
+    }
+
+private:
+    const Matrix<Ext>& inner_;
+};
+
+template<typename F, size_t D, uint32_t W>
+class UnflattenedMatrixView : public Matrix<p3_field::BinomialExtensionField<F, D, W>> {
+public:
+    using Ext = p3_field::BinomialExtensionField<F, D, W>;
+
+    explicit UnflattenedMatrixView(const Matrix<F>& inner) : inner_(inner) {
+        if (inner_.width() % D != 0) {
+            throw std::invalid_argument(
+                "UnflattenedMatrixView: base matrix width must be divisible by extension degree");
         }
     }
-    return RowMajorMatrix<F>(std::move(base_values), base_w);
+
+    size_t width() const override { return inner_.width() / D; }
+    size_t height() const override { return inner_.height(); }
+
+    Ext get_unchecked(size_t r, size_t c) const override {
+        std::array<F, D> coeffs{};
+        for (size_t k = 0; k < D; ++k) {
+            coeffs[k] = inner_.get_unchecked(r, c * D + k);
+        }
+        return Ext(coeffs);
+    }
+
+private:
+    const Matrix<F>& inner_;
+};
+
+template<typename F, size_t D, uint32_t W>
+FlattenedMatrixView<F, D, W>
+flatten_to_base(const Matrix<p3_field::BinomialExtensionField<F, D, W>>& ext_matrix) {
+    return FlattenedMatrixView<F, D, W>(ext_matrix);
 }
 
 template<typename F, size_t D, uint32_t W>
-RowMajorMatrix<p3_field::BinomialExtensionField<F, D, W>>
+UnflattenedMatrixView<F, D, W>
 unflatten_from_base(const Matrix<F>& base_matrix) {
-    const size_t h = base_matrix.height();
-    const size_t base_w = base_matrix.width();
-    if (base_w % D != 0) {
-        throw std::invalid_argument("unflatten_from_base: base matrix width must be divisible by extension degree");
-    }
-
-    const size_t ext_w = base_w / D;
-    using Ext = p3_field::BinomialExtensionField<F, D, W>;
-    std::vector<Ext> ext_values(h * ext_w);
-
-    for (size_t r = 0; r < h; ++r) {
-        Ext* row_out = &ext_values[r * ext_w];
-        for (size_t c = 0; c < ext_w; ++c) {
-            std::array<F, D> coeffs{};
-            for (size_t k = 0; k < D; ++k) {
-                coeffs[k] = base_matrix.get_unchecked(r, c * D + k);
-            }
-            row_out[c] = Ext(coeffs);
-        }
-    }
-
-    return RowMajorMatrix<Ext>(std::move(ext_values), ext_w);
+    return UnflattenedMatrixView<F, D, W>(base_matrix);
 }
 
 } // namespace p3_matrix

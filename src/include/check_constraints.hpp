@@ -93,8 +93,8 @@ std::vector<ConstraintViolation> check_constraints(const AIR& air, const p3_matr
 }
 
 template<typename F, typename AIR>
-bool constraints_hold(const AIR& air, const p3_matrix::Matrix<F>& trace) {
-    return check_constraints<F>(air, trace).empty();
+bool constraints_hold(const AIR& air, const p3_matrix::Matrix<F>& trace, const p3_matrix::Matrix<F>* preprocessed_trace = nullptr) {
+    return check_constraints<F>(air, trace, preprocessed_trace).empty();
 }
 
 } // namespace p3_air

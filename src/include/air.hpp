@@ -89,7 +89,7 @@ public:
         assert_zero(lhs - rhs);
     }
 
-    FilteredAirBuilder<F, Expr, Var> when(const Expr& condition) {
+    virtual FilteredAirBuilder<F, Expr, Var> when(const Expr& condition) {
         return FilteredAirBuilder<F, Expr, Var>(*this, condition);
     }
 

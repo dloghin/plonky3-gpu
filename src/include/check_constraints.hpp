@@ -4,6 +4,7 @@
 #include "matrix.hpp"
 
 #include <cstddef>
+#include <stdexcept>
 #include <vector>
 
 namespace p3_air {
@@ -21,15 +22,23 @@ public:
     DebugConstraintBuilder(
         const p3_matrix::Matrix<F>& trace,
         size_t row_index,
-        std::vector<ConstraintViolation>* failures)
+        std::vector<ConstraintViolation>* failures,
+        const p3_matrix::Matrix<F>* preprocessed_trace = nullptr)
         : trace_(trace),
           row_index_(row_index),
           current_row_(trace.row(row_index)),
           next_row_(trace.row((row_index + 1) % trace.height())),
+          preprocessed_current_(preprocessed_trace == nullptr ? std::vector<F>{} : preprocessed_trace->row(row_index)),
+          preprocessed_next_(preprocessed_trace == nullptr ? std::vector<F>{} : preprocessed_trace->row((row_index + 1) % trace.height())),
+          preprocessed_window_(&preprocessed_current_, &preprocessed_next_),
           failures_(failures) {}
 
     MainWindow main() const override {
         return MainWindow(&current_row_, &next_row_);
+    }
+
+    const MainWindow& preprocessed() const override {
+        return preprocessed_window_;
     }
 
     F is_first_row() const override {
@@ -59,6 +68,9 @@ private:
     size_t row_index_;
     std::vector<F> current_row_;
     std::vector<F> next_row_;
+    std::vector<F> preprocessed_current_;
+    std::vector<F> preprocessed_next_;
+    MainWindow preprocessed_window_;
     std::vector<ConstraintViolation>* failures_;
     size_t constraint_index_ = 0;
 };
@@ -68,6 +80,9 @@ std::vector<ConstraintViolation> check_constraints(const AIR& air, const p3_matr
     std::vector<ConstraintViolation> failures;
     if (trace.height() == 0) {
         return failures;
+    }
+    if (trace.width() != air.width()) {
+        throw std::invalid_argument("trace width must match air width");
     }
 
     for (size_t row = 0; row < trace.height(); ++row) {

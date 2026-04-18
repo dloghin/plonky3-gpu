@@ -69,11 +69,13 @@ public:
     using Field = F;
     using ExprType = Expr;
     using VarType = Var;
+    using PreprocessedWindow = RowWindow<Var>;
     using MainWindow = RowWindow<Var>;
 
     virtual ~AirBuilder() = default;
 
     virtual MainWindow main() const = 0;
+    virtual const PreprocessedWindow& preprocessed() const = 0;
     virtual Expr is_first_row() const = 0;
     virtual Expr is_last_row() const = 0;
     virtual Expr is_transition() const = 0;
@@ -107,6 +109,7 @@ public:
 template<typename F, typename Expr, typename Var>
 class FilteredAirBuilder : public AirBuilder<F, Expr, Var> {
 public:
+    using PreprocessedWindow = RowWindow<Var>;
     using MainWindow = RowWindow<Var>;
 
     FilteredAirBuilder(AirBuilder<F, Expr, Var>& inner, const Expr& condition)
@@ -114,6 +117,10 @@ public:
 
     MainWindow main() const override {
         return inner_.main();
+    }
+
+    const PreprocessedWindow& preprocessed() const override {
+        return inner_.preprocessed();
     }
 
     Expr is_first_row() const override {

@@ -50,6 +50,70 @@ public:
     }
 };
 
+class SymbolicCollectingBuilder
+    : public AirBuilder<BabyBear, SymbolicExpression<BabyBear>, SymbolicExpression<BabyBear>> {
+public:
+    using Expr = SymbolicExpression<BabyBear>;
+    using Window = typename AirBuilder<BabyBear, Expr, Expr>::MainWindow;
+
+    SymbolicCollectingBuilder() {
+        current_vars_ = {Expr::variable(0, 0), Expr::variable(0, 1)};
+        next_vars_ = {Expr::variable(1, 0), Expr::variable(1, 1)};
+        main_window_ = Window(&current_vars_, &next_vars_);
+        preprocessed_window_ = Window(&empty_vars_, &empty_vars_);
+    }
+
+    Window main() const override {
+        return main_window_;
+    }
+
+    const Window& preprocessed() const override {
+        return preprocessed_window_;
+    }
+
+    Expr is_first_row() const override {
+        return Expr(BabyBear(1));
+    }
+
+    Expr is_last_row() const override {
+        return Expr(BabyBear(0));
+    }
+
+    Expr is_transition() const override {
+        return Expr(BabyBear(1));
+    }
+
+    void assert_zero(const Expr& expression) override {
+        constraints_.push_back(expression);
+    }
+
+    const std::vector<Expr>& constraints() const {
+        return constraints_;
+    }
+
+private:
+    std::vector<Expr> current_vars_;
+    std::vector<Expr> next_vars_;
+    std::vector<Expr> empty_vars_;
+    Window main_window_;
+    Window preprocessed_window_;
+    std::vector<Expr> constraints_;
+};
+
+class GenericExpressionAir : public Air<SymbolicCollectingBuilder> {
+public:
+    size_t width() const override {
+        return 2;
+    }
+
+    void eval(SymbolicCollectingBuilder& builder) const override {
+        auto main = builder.main();
+        auto transition = builder.when_transition();
+        transition.assert_eq(main.next(0), main.current(1));
+        transition.assert_eq(main.next(1), main.current(0) + main.current(1));
+    }
+};
+
 TEST(AirFrameworkTest, FibonacciAirAcceptsValidTrace) {
     FibonacciAir air;
     RowMajorMatrix<BabyBear> trace({
@@ -109,21 +173,40 @@ TEST(AirFrameworkTest, SymbolicExpressionSupportsOperatorsAndEvaluation) {
 }
 
 TEST(AirFrameworkTest, VirtualColumnComputesLinearCombination) {
-    RowMajorMatrix<BabyBear> trace({
-        BabyBear(2), BabyBear(7),
-        BabyBear(5), BabyBear(11),
-    }, 2);
-
-    std::vector<ConstraintViolation> failures;
-    DebugConstraintBuilder<BabyBear> builder(trace, 0, &failures);
-    const auto window = builder.main();
-
     VirtualColumn<BabyBear> column(BabyBear(3));
-    column.add_term(0, 0, BabyBear(2));
-    column.add_term(1, 1, BabyBear(1));
+    column.add_main_term(0, BabyBear(2));
+    column.add_preprocessed_term(1, BabyBear(5));
 
-    const BabyBear value = column.evaluate(window);
-    EXPECT_EQ(value, BabyBear(3) + BabyBear(2) * BabyBear(2) + BabyBear(11));
+    const std::vector<BabyBear> preprocessed = {BabyBear(13), BabyBear(17)};
+    const std::vector<BabyBear> main = {BabyBear(2), BabyBear(11)};
+    const BabyBear value = column.evaluate(preprocessed, main);
+    EXPECT_EQ(value, BabyBear(3) + BabyBear(2) * BabyBear(2) + BabyBear(5) * BabyBear(17));
+}
+
+TEST(AirFrameworkTest, GenericExpressionBuilderCollectsSymbolicConstraints) {
+    GenericExpressionAir air;
+    SymbolicCollectingBuilder builder;
+    air.eval(builder);
+
+    ASSERT_EQ(builder.constraints().size(), 2u);
+    const auto assignment = [](const SymbolicVariable& var) {
+        if (var.row_offset == 0 && var.column == 0) return BabyBear(2);
+        if (var.row_offset == 0 && var.column == 1) return BabyBear(3);
+        if (var.row_offset == 1 && var.column == 0) return BabyBear(3);
+        return BabyBear(5);
+    };
+    EXPECT_EQ(builder.constraints()[0].evaluate(assignment), BabyBear(0));
+    EXPECT_EQ(builder.constraints()[1].evaluate(assignment), BabyBear(0));
+}
+
+TEST(AirFrameworkTest, CheckConstraintsRejectsWidthMismatch) {
+    FibonacciAir air;
+    RowMajorMatrix<BabyBear> bad_width_trace({
+        BabyBear(1), BabyBear(1), BabyBear(1),
+        BabyBear(1), BabyBear(2), BabyBear(3),
+    }, 3);
+
+    EXPECT_THROW((p3_air::check_constraints<BabyBear>(air, bad_width_trace)), std::invalid_argument);
 }
 
 } // namespace

@@ -34,6 +34,10 @@
 #include <utility>
 #include <vector>
 
+#if defined(_OPENMP)
+#include <omp.h>
+#endif
+
 using namespace p3_uni_stark;
 using namespace p3_fri;
 using namespace p3_field;
@@ -465,4 +469,54 @@ TEST(UniStark, PublicValuesAreBoundIntoTranscript) {
         std::vector<BB> wrong = { BB(1), BB(2), BB(4) };
         EXPECT_FALSE(verify(config, air, verifier_ch, proof, wrong));
     }
+}
+
+TEST(UniStark, ProverIsDeterministicAcrossOpenMpThreadCounts) {
+#if !defined(_OPENMP)
+    GTEST_SKIP() << "OpenMP not enabled in this build";
+#else
+    const int max_threads = omp_get_max_threads();
+    if (max_threads < 2) {
+        GTEST_SKIP() << "OpenMP has fewer than 2 threads available";
+    }
+
+    const int old_dynamic = omp_get_dynamic();
+    const int old_threads = omp_get_max_threads();
+
+    omp_set_dynamic(0);
+
+    MyCfg config_single(make_pcs());
+    FibonacciAir air;
+    auto trace_single = build_fibonacci_trace(8);
+    Dft dft_single;
+
+    omp_set_num_threads(1);
+    MockChallenger challenger_single;
+    auto proof_single = prove(config_single, air, challenger_single, trace_single, dft_single);
+
+    MyCfg config_multi(make_pcs());
+    auto trace_multi = build_fibonacci_trace(8);
+    Dft dft_multi;
+
+    omp_set_num_threads(max_threads);
+    MockChallenger challenger_multi;
+    auto proof_multi = prove(config_multi, air, challenger_multi, trace_multi, dft_multi);
+
+    omp_set_num_threads(old_threads);
+    omp_set_dynamic(old_dynamic);
+
+    EXPECT_EQ(proof_single.degree_bits, proof_multi.degree_bits);
+    EXPECT_EQ(proof_single.log_num_quotient_chunks, proof_multi.log_num_quotient_chunks);
+    EXPECT_EQ(proof_single.preprocessed_width, proof_multi.preprocessed_width);
+    EXPECT_EQ(proof_single.commitments.trace.hash, proof_multi.commitments.trace.hash);
+    EXPECT_EQ(proof_single.commitments.quotient_chunks.hash, proof_multi.commitments.quotient_chunks.hash);
+    EXPECT_EQ(proof_single.opened_values.trace_local, proof_multi.opened_values.trace_local);
+    EXPECT_EQ(proof_single.opened_values.trace_next, proof_multi.opened_values.trace_next);
+    EXPECT_EQ(proof_single.opened_values.quotient_chunks, proof_multi.opened_values.quotient_chunks);
+
+    MockChallenger verifier_single;
+    MockChallenger verifier_multi;
+    EXPECT_TRUE(verify(config_single, air, verifier_single, proof_single));
+    EXPECT_TRUE(verify(config_multi, air, verifier_multi, proof_multi));
+#endif
 }

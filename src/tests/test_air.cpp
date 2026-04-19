@@ -9,6 +9,7 @@
 
 using p3_air::Air;
 using p3_air::AirBuilder;
+using p3_air::ConstRowView;
 using p3_air::ConstraintViolation;
 using p3_air::DebugConstraintBuilder;
 using p3_air::SymbolicExpression;
@@ -59,8 +60,8 @@ public:
     SymbolicCollectingBuilder() {
         current_vars_ = {Expr::variable(0, 0), Expr::variable(0, 1)};
         next_vars_ = {Expr::variable(1, 0), Expr::variable(1, 1)};
-        main_window_ = Window(&current_vars_, &next_vars_);
-        preprocessed_window_ = Window(&empty_vars_, &empty_vars_);
+        main_window_ = Window(ConstRowView<Expr>(current_vars_), ConstRowView<Expr>(next_vars_));
+        preprocessed_window_ = Window(ConstRowView<Expr>(empty_vars_), ConstRowView<Expr>(empty_vars_));
     }
 
     Window main() const override {

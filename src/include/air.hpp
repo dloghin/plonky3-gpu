@@ -48,15 +48,6 @@ public:
     RowWindow(ConstRowView<T> current, ConstRowView<T> next)
         : current_(current), next_(next) {}
 
-    RowWindow(const std::vector<T>* current, const std::vector<T>* next) {
-        if (current) {
-            current_ = ConstRowView<T>(*current);
-        }
-        if (next) {
-            next_ = ConstRowView<T>(*next);
-        }
-    }
-
     ConstRowView<T> current_slice() const {
         if (!current_) {
             throw std::logic_error("current row is not available");

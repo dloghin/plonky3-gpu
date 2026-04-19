@@ -12,7 +12,8 @@
  *   4. Reconstruct `Q(zeta) = sum_{d} basis_d * Q_d(zeta)` from the opened
  *      quotient chunks.
  *   5. Run the constraint folder on the opened trace rows at `zeta` and check
- *      `folded_constraints * (1 / Z_H(zeta)) == Q(zeta)`.
+ *      `folded_constraints * (1 / Z_H(zeta)) == Q(zeta)`. If `Z_H(zeta)` or a
+ *      selector denominator is zero, return `false` (no inversion of zero).
  *
  * Returns `true` if every step passes; `false` otherwise. Any structural
  * mismatch (bad widths, missing preprocessed opening, etc.) also produces
@@ -155,9 +156,17 @@ bool verify(SC& config,
     Challenge z_h        = zeta_pow_N - one_ext;
     Challenge omega_N_inv_c = Challenge::from_base(omega_N.inv());
 
-    Challenge is_first_row  = z_h * (zeta - one_ext).inv();
-    Challenge is_last_row   = z_h * (zeta - omega_N_inv_c).inv();
-    Challenge is_transition = zeta - omega_N_inv_c;
+    const Challenge zeta_minus_one           = zeta - one_ext;
+    const Challenge zeta_minus_omega_N_inv   = zeta - omega_N_inv_c;
+    if (z_h == Challenge::zero_val()
+        || zeta_minus_one == Challenge::zero_val()
+        || zeta_minus_omega_N_inv == Challenge::zero_val()) {
+        return false;
+    }
+
+    Challenge is_first_row  = z_h * zeta_minus_one.inv();
+    Challenge is_last_row   = z_h * zeta_minus_omega_N_inv.inv();
+    Challenge is_transition = zeta_minus_omega_N_inv;
     Challenge inv_vanishing = z_h.inv();
 
     using Folder = ConstraintFolder<Val, Challenge>;

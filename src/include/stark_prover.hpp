@@ -158,24 +158,20 @@ Proof<SC> prove(SC& config,
     const Val omega_K_pow_N = omega_K.exp_u64(static_cast<uint64_t>(degree)); // = omega_{num_chunks}
     const Val one        = Val::one_val();
 
-    std::vector<Val> x_vals(quotient_size);
-    std::vector<Val> z_h_vals(quotient_size);
-    std::vector<Val> inv_vanishing(quotient_size);
-    std::vector<Val> is_first_row_vals(quotient_size);
-    std::vector<Val> is_last_row_vals(quotient_size);
-    std::vector<Val> is_transition_vals(quotient_size);
+    std::vector<Challenge> inv_vanishing_ch(quotient_size);
+    std::vector<Challenge> is_first_row_ch(quotient_size);
+    std::vector<Challenge> is_last_row_ch(quotient_size);
+    std::vector<Challenge> is_transition_ch(quotient_size);
     {
         Val xk  = g;            // x_k  = g * omega_K^k, start k=0
         Val zhc = g_pow_N;      // g_pow_N * omega_{num_chunks}^k, start k=0
         for (std::size_t k = 0; k < quotient_size; ++k) {
-            x_vals[k]            = xk;
-            const Val z_h        = zhc - one;
-            z_h_vals[k]          = z_h;
+            const Val z_h = zhc - one;
             // inv_vanishing: 1 / Z_H(x_k). Safe: x_k ∈ gK ∖ H so Z_H ≠ 0.
-            inv_vanishing[k]     = z_h.inv();
-            is_first_row_vals[k] = z_h * (xk - one).inv();
-            is_last_row_vals[k]  = z_h * (xk - omega_N_inv).inv();
-            is_transition_vals[k] = xk - omega_N_inv;
+            inv_vanishing_ch[k]     = Challenge::from_base(z_h.inv());
+            is_first_row_ch[k]      = Challenge::from_base(z_h * (xk - one).inv());
+            is_last_row_ch[k]       = Challenge::from_base(z_h * (xk - omega_N_inv).inv());
+            is_transition_ch[k]     = Challenge::from_base(xk - omega_N_inv);
 
             xk  = xk  * omega_K;
             zhc = zhc * omega_K_pow_N;
@@ -185,12 +181,33 @@ Proof<SC> prove(SC& config,
     using Folder = ConstraintFolder<Val, Challenge>;
     using MainWindow = typename Folder::MainWindow;
 
-    // Storage for lifted rows (reused across iterations).
     const std::size_t trace_width = air.width();
-    std::vector<Challenge> cur_row(trace_width, Challenge::zero_val());
-    std::vector<Challenge> nxt_row(trace_width, Challenge::zero_val());
-    std::vector<Challenge> cur_pre_row(preprocessed_width, Challenge::zero_val());
-    std::vector<Challenge> nxt_pre_row(preprocessed_width, Challenge::zero_val());
+
+    // Embed the LDE once into the extension field so each cell is lifted a
+    // single time (the quotient loop pairs row k with k_next and would
+    // otherwise call from_base twice per cell over the full domain).
+    std::vector<Challenge> trace_on_gK_ch(quotient_size * trace_width);
+    for (std::size_t k = 0; k < quotient_size; ++k) {
+        const std::size_t row_off = k * trace_width;
+        for (std::size_t c = 0; c < trace_width; ++c) {
+            trace_on_gK_ch[row_off + c] =
+                Challenge::from_base(trace_on_gK.get_unchecked(k, c));
+        }
+    }
+    trace_on_gK = p3_matrix::RowMajorMatrix<Val>();
+
+    std::vector<Challenge> preprocessed_on_gK_ch;
+    if (has_preprocessed) {
+        preprocessed_on_gK_ch.resize(quotient_size * preprocessed_width);
+        for (std::size_t k = 0; k < quotient_size; ++k) {
+            const std::size_t row_off = k * preprocessed_width;
+            for (std::size_t c = 0; c < preprocessed_width; ++c) {
+                preprocessed_on_gK_ch[row_off + c] =
+                    Challenge::from_base(preprocessed_on_gK.get_unchecked(k, c));
+            }
+        }
+        preprocessed_on_gK = p3_matrix::RowMajorMatrix<Val>();
+    }
 
     Folder folder;
     folder.set_alpha(alpha);
@@ -199,36 +216,31 @@ Proof<SC> prove(SC& config,
     for (std::size_t k = 0; k < quotient_size; ++k) {
         const std::size_t k_next = (k + num_quotient_chunks) % quotient_size;
 
-        // Lift trace rows into Challenge.
-        for (std::size_t c = 0; c < trace_width; ++c) {
-            cur_row[c] = Challenge::from_base(trace_on_gK.get_unchecked(k, c));
-            nxt_row[c] = Challenge::from_base(trace_on_gK.get_unchecked(k_next, c));
-        }
+        const Challenge* cur_ptr = trace_on_gK_ch.data() + k * trace_width;
+        const Challenge* nxt_ptr = trace_on_gK_ch.data() + k_next * trace_width;
         MainWindow main_win(
-            p3_air::ConstRowView<Challenge>(cur_row.data(), trace_width),
-            p3_air::ConstRowView<Challenge>(nxt_row.data(), trace_width));
+            p3_air::ConstRowView<Challenge>(cur_ptr, trace_width),
+            p3_air::ConstRowView<Challenge>(nxt_ptr, trace_width));
 
         MainWindow pre_win;
         if (has_preprocessed) {
-            for (std::size_t c = 0; c < preprocessed_width; ++c) {
-                cur_pre_row[c] = Challenge::from_base(preprocessed_on_gK.get_unchecked(k, c));
-                nxt_pre_row[c] = Challenge::from_base(preprocessed_on_gK.get_unchecked(k_next, c));
-            }
+            const Challenge* pre_cur = preprocessed_on_gK_ch.data() + k * preprocessed_width;
+            const Challenge* pre_nxt =
+                preprocessed_on_gK_ch.data() + k_next * preprocessed_width;
             pre_win = MainWindow(
-                p3_air::ConstRowView<Challenge>(cur_pre_row.data(), preprocessed_width),
-                p3_air::ConstRowView<Challenge>(nxt_pre_row.data(), preprocessed_width));
+                p3_air::ConstRowView<Challenge>(pre_cur, preprocessed_width),
+                p3_air::ConstRowView<Challenge>(pre_nxt, preprocessed_width));
         }
 
         folder.set_windows(main_win, pre_win);
         folder.set_selectors(
-            Challenge::from_base(is_first_row_vals[k]),
-            Challenge::from_base(is_last_row_vals[k]),
-            Challenge::from_base(is_transition_vals[k]));
+            is_first_row_ch[k],
+            is_last_row_ch[k],
+            is_transition_ch[k]);
         folder.reset_accumulator();
         air.eval(folder);
 
-        quotient_values[k] =
-            folder.accumulator() * Challenge::from_base(inv_vanishing[k]);
+        quotient_values[k] = folder.accumulator() * inv_vanishing_ch[k];
     }
 
     // ---- 6. Flatten Q evals to width-D Val matrix on gK, convert to H_K ---

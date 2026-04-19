@@ -27,6 +27,7 @@
 #include "stark_proof.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -147,14 +148,16 @@ bool verify(SC& config,
     // ---- 5. Evaluate folded constraints at zeta -------------------------
     // Selectors at zeta (trace_domain has shift = 1 so y = zeta):
     //   z_h           = zeta^N - 1
-    //   is_first_row  = z_h / (zeta - 1)
-    //   is_last_row   = z_h / (zeta - omega_N^{-1})
-    //   is_transition = zeta - omega_N^{-1}
+    //   is_first_row  = z_h / (N * (zeta - 1))
+    //   is_last_row   = z_h * omega_N^{-1} / (N * (zeta - omega_N^{-1}))
+    //   is_transition = 1 - is_last_row
     //   inv_vanishing = 1 / z_h
     Challenge zeta_pow_N = zeta.exp_u64(static_cast<uint64_t>(degree));
     Challenge one_ext    = Challenge::one_val();
     Challenge z_h        = zeta_pow_N - one_ext;
     Challenge omega_N_inv_c = Challenge::from_base(omega_N.inv());
+    const Challenge inv_degree_c =
+        Challenge::from_base(Val(static_cast<uint32_t>(degree)).inv());
 
     const Challenge zeta_minus_one           = zeta - one_ext;
     const Challenge zeta_minus_omega_N_inv   = zeta - omega_N_inv_c;
@@ -164,9 +167,9 @@ bool verify(SC& config,
         return false;
     }
 
-    Challenge is_first_row  = z_h * zeta_minus_one.inv();
-    Challenge is_last_row   = z_h * zeta_minus_omega_N_inv.inv();
-    Challenge is_transition = zeta_minus_omega_N_inv;
+    Challenge is_first_row  = z_h * zeta_minus_one.inv() * inv_degree_c;
+    Challenge is_last_row   = z_h * zeta_minus_omega_N_inv.inv() * omega_N_inv_c * inv_degree_c;
+    Challenge is_transition = one_ext - is_last_row;
     Challenge inv_vanishing = z_h.inv();
 
     using Folder = ConstraintFolder<Val, Challenge>;

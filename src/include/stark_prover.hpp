@@ -183,6 +183,8 @@ Proof<SC> prove(SC& config,
     const Val omega_K    = Val::two_adic_generator(log_quotient_size);
     const Val g_pow_N    = g.exp_u64(static_cast<uint64_t>(degree));
     const Val omega_K_pow_N = omega_K.exp_u64(static_cast<uint64_t>(degree)); // = omega_{num_chunks}
+    const Val inv_degree = Val(static_cast<uint32_t>(degree)).inv();
+    const Val last_row_scale = omega_N_inv * inv_degree;
     const Val one        = Val::one_val();
 
     std::vector<Challenge> inv_vanishing_ch(quotient_size);
@@ -214,8 +216,13 @@ Proof<SC> prove(SC& config,
         for (std::size_t k = 0; k < quotient_size; ++k) {
             const Val z_h = inversion_inputs[3 * k];
             inv_vanishing_ch[k] = Challenge::from_base(inversion_outputs[3 * k]);
-            is_first_row_ch[k] = Challenge::from_base(z_h * inversion_outputs[3 * k + 1]);
-            is_last_row_ch[k] = Challenge::from_base(z_h * inversion_outputs[3 * k + 2]);
+            // Normalized selectors (Lagrange basis over H): first/last are 1 on
+            // their target row and 0 on other trace rows.
+            const Val is_first = z_h * inversion_outputs[3 * k + 1] * inv_degree;
+            const Val is_last = z_h * inversion_outputs[3 * k + 2] * last_row_scale;
+            is_first_row_ch[k] = Challenge::from_base(is_first);
+            is_last_row_ch[k] = Challenge::from_base(is_last);
+            is_transition_ch[k] = Challenge::one_val() - is_last_row_ch[k];
         }
     }
 

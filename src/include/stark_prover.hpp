@@ -28,6 +28,7 @@
 #include "stark_proof.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -211,11 +212,8 @@ Proof<SC> prove(SC& config,
         preprocessed_on_gK = p3_matrix::RowMajorMatrix<Val>();
     }
 
-    Folder folder;
-    folder.set_alpha(alpha);
-
     std::vector<Challenge> quotient_values(quotient_size);
-    for (std::size_t k = 0; k < quotient_size; ++k) {
+    auto eval_quotient_at = [&](std::size_t k) {
         const std::size_t k_next = (k + num_quotient_chunks) % quotient_size;
 
         const Challenge* cur_ptr = trace_on_gK_ch.data() + k * trace_width;
@@ -234,6 +232,9 @@ Proof<SC> prove(SC& config,
                 p3_air::ConstRowView<Challenge>(pre_nxt, preprocessed_width));
         }
 
+        // Each row evaluation is independent; keep folder state thread-local.
+        Folder folder;
+        folder.set_alpha(alpha);
         folder.set_windows(main_win, pre_win);
         folder.set_selectors(
             is_first_row_ch[k],
@@ -242,8 +243,20 @@ Proof<SC> prove(SC& config,
         folder.reset_accumulator();
         air.eval(folder);
 
-        quotient_values[k] = folder.accumulator() * inv_vanishing_ch[k];
+        return folder.accumulator() * inv_vanishing_ch[k];
+    };
+
+#if defined(_OPENMP)
+#pragma omp parallel for schedule(static)
+    for (std::int64_t k_i = 0; k_i < static_cast<std::int64_t>(quotient_size); ++k_i) {
+        const std::size_t k = static_cast<std::size_t>(k_i);
+        quotient_values[k] = eval_quotient_at(k);
     }
+#else
+    for (std::size_t k = 0; k < quotient_size; ++k) {
+        quotient_values[k] = eval_quotient_at(k);
+    }
+#endif
 
     // ---- 6. Flatten Q evals to width-D Val matrix on gK, convert to H_K ---
     constexpr std::size_t D = Challenge::DEGREE;

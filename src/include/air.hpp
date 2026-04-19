@@ -22,6 +22,7 @@ public:
     ConstRowView(const T* data, size_t length) : data_(data), length_(length) {}
 
     explicit ConstRowView(const std::vector<T>& vec) : data_(vec.data()), length_(vec.size()) {}
+    explicit ConstRowView(std::vector<T>&&) = delete;
 
     size_t size() const {
         return length_;

@@ -30,7 +30,7 @@ public:
           next_row_(trace.row((row_index + 1) % trace.height())),
           preprocessed_current_(preprocessed_trace == nullptr ? std::vector<F>{} : preprocessed_trace->row(row_index)),
           preprocessed_next_(preprocessed_trace == nullptr ? std::vector<F>{} : preprocessed_trace->row((row_index + 1) % trace.height())),
-          preprocessed_window_(&preprocessed_current_, &preprocessed_next_),
+          preprocessed_window_(preprocessed_trace ? &preprocessed_current_ : nullptr, preprocessed_trace ? &preprocessed_next_ : nullptr),
           failures_(failures) {}
 
     MainWindow main() const override {

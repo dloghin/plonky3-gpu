@@ -21,20 +21,28 @@ public:
 
     DebugConstraintBuilder(
         const p3_matrix::Matrix<F>& trace,
-        size_t row_index,
         std::vector<ConstraintViolation>* failures,
         const p3_matrix::Matrix<F>* preprocessed_trace = nullptr)
-        : trace_(trace), row_index_(row_index), failures_(failures) {
-        const size_t h = trace.height();
+        : trace_(trace), preprocessed_trace_(preprocessed_trace), failures_(failures) {}
+
+    /// Rebind row-local views and reset the per-row constraint counter. Fallback row buffers are
+    /// reused across calls so checking every row does not repeatedly allocate internal vectors.
+    void reset_for_row(size_t row_index) {
+        row_index_ = row_index;
+        constraint_index_ = 0;
+
+        const size_t h = trace_.height();
         const size_t next_i = (row_index + 1) % h;
-        ConstRowView<F> cur = matrix_row_view(trace, row_index, &main_current_fallback_);
-        ConstRowView<F> nxt = matrix_row_view(trace, next_i, &main_next_fallback_);
+        ConstRowView<F> cur = matrix_row_view(trace_, row_index, &main_current_fallback_);
+        ConstRowView<F> nxt = matrix_row_view(trace_, next_i, &main_next_fallback_);
         main_window_ = MainWindow(cur, nxt);
 
-        if (preprocessed_trace != nullptr) {
-            ConstRowView<F> pc = matrix_row_view(*preprocessed_trace, row_index, &preprocessed_current_fallback_);
-            ConstRowView<F> pn = matrix_row_view(*preprocessed_trace, next_i, &preprocessed_next_fallback_);
+        if (preprocessed_trace_ != nullptr) {
+            ConstRowView<F> pc = matrix_row_view(*preprocessed_trace_, row_index, &preprocessed_current_fallback_);
+            ConstRowView<F> pn = matrix_row_view(*preprocessed_trace_, next_i, &preprocessed_next_fallback_);
             preprocessed_window_ = MainWindow(pc, pn);
+        } else {
+            preprocessed_window_ = MainWindow();
         }
     }
 
@@ -85,14 +93,15 @@ private:
     }
 
     const p3_matrix::Matrix<F>& trace_;
-    size_t row_index_;
+    const p3_matrix::Matrix<F>* preprocessed_trace_;
+    std::vector<ConstraintViolation>* failures_;
+    size_t row_index_ = 0;
     std::vector<F> main_current_fallback_;
     std::vector<F> main_next_fallback_;
     std::vector<F> preprocessed_current_fallback_;
     std::vector<F> preprocessed_next_fallback_;
     MainWindow main_window_;
     MainWindow preprocessed_window_;
-    std::vector<ConstraintViolation>* failures_;
     size_t constraint_index_ = 0;
 };
 
@@ -109,8 +118,9 @@ std::vector<ConstraintViolation> check_constraints(
         throw std::invalid_argument("trace width must match air width");
     }
 
+    DebugConstraintBuilder<F> builder(trace, &failures, preprocessed_trace);
     for (size_t row = 0; row < trace.height(); ++row) {
-        DebugConstraintBuilder<F> builder(trace, row, &failures, preprocessed_trace);
+        builder.reset_for_row(row);
         air.eval(builder);
     }
     return failures;

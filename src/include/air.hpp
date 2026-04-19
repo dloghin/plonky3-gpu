@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -12,30 +13,66 @@ class AirBuilder;
 template<typename F, typename Expr = F, typename Var = Expr>
 class FilteredAirBuilder;
 
+/// Non-owning view of a contiguous matrix row (or any contiguous element range).
+template<typename T>
+class ConstRowView {
+public:
+    ConstRowView() = default;
+
+    ConstRowView(const T* data, size_t length) : data_(data), length_(length) {}
+
+    explicit ConstRowView(const std::vector<T>& vec) : data_(vec.data()), length_(vec.size()) {}
+
+    size_t size() const {
+        return length_;
+    }
+
+    const T& operator[](size_t index) const {
+        return data_[index];
+    }
+
+    const T* data() const {
+        return data_;
+    }
+
+private:
+    const T* data_ = nullptr;
+    size_t length_ = 0;
+};
+
 template<typename T>
 class RowWindow {
 public:
     RowWindow() = default;
 
-    RowWindow(const std::vector<T>* current, const std::vector<T>* next)
+    RowWindow(ConstRowView<T> current, ConstRowView<T> next)
         : current_(current), next_(next) {}
 
-    const std::vector<T>& current_slice() const {
-        if (current_ == nullptr) {
+    RowWindow(const std::vector<T>* current, const std::vector<T>* next) {
+        if (current) {
+            current_ = ConstRowView<T>(*current);
+        }
+        if (next) {
+            next_ = ConstRowView<T>(*next);
+        }
+    }
+
+    ConstRowView<T> current_slice() const {
+        if (!current_) {
             throw std::logic_error("current row is not available");
         }
         return *current_;
     }
 
-    const std::vector<T>& next_slice() const {
-        if (next_ == nullptr) {
+    ConstRowView<T> next_slice() const {
+        if (!next_) {
             throw std::logic_error("next row is not available");
         }
         return *next_;
     }
 
     const T& current(size_t column) const {
-        const auto& row = current_slice();
+        const ConstRowView<T> row = current_slice();
         if (column >= row.size()) {
             throw std::out_of_range("current row column out of bounds");
         }
@@ -43,7 +80,7 @@ public:
     }
 
     const T& next(size_t column) const {
-        const auto& row = next_slice();
+        const ConstRowView<T> row = next_slice();
         if (column >= row.size()) {
             throw std::out_of_range("next row column out of bounds");
         }
@@ -51,8 +88,8 @@ public:
     }
 
 private:
-    const std::vector<T>* current_ = nullptr;
-    const std::vector<T>* next_ = nullptr;
+    std::optional<ConstRowView<T>> current_;
+    std::optional<ConstRowView<T>> next_;
 };
 
 template<typename AB>

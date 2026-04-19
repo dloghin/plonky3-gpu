@@ -63,6 +63,7 @@ add_plonky3_test(commit_tests test_commit.cpp)
 add_plonky3_test(challenger_tests test_challenger.cpp)
 add_plonky3_test(challengers_tests test_challengers.cpp)
 add_plonky3_test(air_tests test_air.cpp)
+add_plonky3_test(uni_stark_tests test_uni_stark.cpp)
 
 # -- Symmetric tests --
 add_plonky3_test(symmetric_tests test_symmetric.cpp)

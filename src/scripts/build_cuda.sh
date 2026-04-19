@@ -42,6 +42,7 @@ if [ -n "${CUDA_PATH}" ]; then
         -DBUILD_TESTS=ON \
         -DBUILD_EXAMPLES=ON \
         -DBUILD_BENCHMARKS=ON \
+        -DCMAKE_CXX_FLAGS="-fopenmp" \
         -DENABLE_CUDA=ON \
         -DBUILD_CUDA_EXAMPLES=ON \
         -DCMAKE_CUDA_COMPILER="${CUDA_PATH}/bin/nvcc"
@@ -52,6 +53,7 @@ else
         -DBUILD_TESTS=ON \
         -DBUILD_EXAMPLES=ON \
         -DBUILD_BENCHMARKS=ON \
+        -DCMAKE_CXX_FLAGS="-fopenmp" \
         -DENABLE_CUDA=OFF
 fi
 

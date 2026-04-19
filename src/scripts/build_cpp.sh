@@ -22,6 +22,7 @@ cmake "$SRC_DIR" \
     -DBUILD_TESTS=ON \
     -DBUILD_EXAMPLES=ON \
     -DBUILD_BENCHMARKS=ON \
+    -DCMAKE_CXX_FLAGS="-fopenmp" \
     -DENABLE_CUDA=OFF
 
 echo "Building..."

@@ -16,6 +16,7 @@ cmake "$SRC_DIR" \
     -DBUILD_TESTS=ON \
     -DBUILD_EXAMPLES=OFF \
     -DBUILD_BENCHMARKS=OFF \
+    -DCMAKE_CXX_FLAGS="-fopenmp" \
     -DENABLE_CUDA=OFF
 
 echo "Building tests..."

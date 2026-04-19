@@ -371,6 +371,22 @@ TEST(UniStark, FibonacciRejectsShapeMismatch) {
     EXPECT_FALSE(verify(config, air, verifier_ch, bad));
 }
 
+TEST(UniStark, RejectsWrongQuotientChunkLog) {
+    MyCfg config(make_pcs());
+    FibonacciAir air;
+    auto trace = build_fibonacci_trace(4);
+
+    Dft dft;
+    MockChallenger prover_ch;
+    auto proof = prove(config, air, prover_ch, trace, dft);
+
+    auto bad = proof;
+    bad.log_num_quotient_chunks += 1;
+
+    MockChallenger verifier_ch;
+    EXPECT_FALSE(verify(config, air, verifier_ch, bad));
+}
+
 TEST(UniStark, SquareAirExercisesQuotientSplitting) {
     MyCfg config(make_pcs());
     SquareAir air;

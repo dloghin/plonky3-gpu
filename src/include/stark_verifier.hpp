@@ -22,8 +22,7 @@
 
 #include "air.hpp"
 #include "constraint_folder.hpp"
-#include "dense_matrix.hpp"
-#include "stark_config.hpp"
+#include "p3_util/util.hpp"
 #include "stark_proof.hpp"
 
 #include <cstddef>
@@ -44,6 +43,13 @@ bool verify(SC& config,
     using Domain    = typename Pcs::Domain;
 
     Pcs& pcs = config.pcs();
+
+    // Must match prover's `log_num_quotient_chunks` derivation from `air.constraint_degree()`.
+    const std::size_t expected_log_chunks = p3_util::log2_ceil_usize(
+        air.constraint_degree() <= 1 ? 1 : air.constraint_degree() - 1);
+    if (proof.log_num_quotient_chunks != expected_log_chunks) {
+        return false;
+    }
 
     const std::size_t log_degree         = proof.degree_bits;
     const std::size_t degree             = std::size_t(1) << log_degree;

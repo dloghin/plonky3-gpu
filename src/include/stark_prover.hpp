@@ -25,8 +25,6 @@
 #include "constraint_folder.hpp"
 #include "dense_matrix.hpp"
 #include "p3_util/util.hpp"
-#include "radix2_dit.hpp"
-#include "stark_config.hpp"
 #include "stark_proof.hpp"
 
 #include <cstddef>
@@ -37,15 +35,6 @@
 namespace p3_uni_stark {
 
 namespace detail {
-
-template<typename Val, typename Challenge>
-inline std::vector<Challenge> lift_row(const Val* src, std::size_t width) {
-    std::vector<Challenge> out(width);
-    for (std::size_t c = 0; c < width; ++c) {
-        out[c] = Challenge::from_base(src[c]);
-    }
-    return out;
-}
 
 /// Given a matrix of extension-field evaluations on `gK` (stored as a width-D
 /// `Val` matrix with rows packing the D basis coefficients of each evaluation),

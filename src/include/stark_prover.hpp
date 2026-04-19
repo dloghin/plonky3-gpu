@@ -204,7 +204,6 @@ Proof<SC> prove(SC& config,
             inversion_inputs[3 * k]     = z_h;
             inversion_inputs[3 * k + 1] = xk - one;
             inversion_inputs[3 * k + 2] = xk - omega_N_inv;
-            is_transition_ch[k]     = Challenge::from_base(xk - omega_N_inv);
 
             xk  = xk  * omega_K;
             zhc = zhc * omega_K_pow_N;

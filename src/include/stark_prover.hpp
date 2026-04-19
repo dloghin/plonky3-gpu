@@ -51,6 +51,30 @@ convert_quotient_to_natural_domain(p3_matrix::RowMajorMatrix<Val> qmat_on_gK,
     return dft.dft_batch(std::move(coefs));
 }
 
+/// Batch multiplicative inverse via Montgomery's trick.
+/// Preconditions: all values are non-zero.
+template<typename F>
+inline std::vector<F> batch_multiplicative_inverse(const std::vector<F>& values) {
+    const std::size_t n = values.size();
+    if (n == 0) {
+        return {};
+    }
+
+    std::vector<F> invs(n);
+    invs[0] = values[0];
+    for (std::size_t i = 1; i < n; ++i) {
+        invs[i] = invs[i - 1] * values[i];
+    }
+
+    F running_inv = invs[n - 1].inv();
+    for (std::size_t i = n - 1; i > 0; --i) {
+        invs[i] = invs[i - 1] * running_inv;
+        running_inv = running_inv * values[i];
+    }
+    invs[0] = running_inv;
+    return invs;
+}
+
 } // namespace detail
 
 /// Prove that `trace` satisfies `air`. The caller-supplied `challenger` is
@@ -166,18 +190,32 @@ Proof<SC> prove(SC& config,
     std::vector<Challenge> is_last_row_ch(quotient_size);
     std::vector<Challenge> is_transition_ch(quotient_size);
     {
+        std::vector<Val> inversion_inputs;
+        inversion_inputs.resize(3 * quotient_size);
+
         Val xk  = g;            // x_k  = g * omega_K^k, start k=0
         Val zhc = g_pow_N;      // g_pow_N * omega_{num_chunks}^k, start k=0
         for (std::size_t k = 0; k < quotient_size; ++k) {
             const Val z_h = zhc - one;
-            // inv_vanishing: 1 / Z_H(x_k). Safe: x_k ∈ gK ∖ H so Z_H ≠ 0.
-            inv_vanishing_ch[k]     = Challenge::from_base(z_h.inv());
-            is_first_row_ch[k]      = Challenge::from_base(z_h * (xk - one).inv());
-            is_last_row_ch[k]       = Challenge::from_base(z_h * (xk - omega_N_inv).inv());
+            inversion_inputs[3 * k]     = z_h;
+            inversion_inputs[3 * k + 1] = xk - one;
+            inversion_inputs[3 * k + 2] = xk - omega_N_inv;
             is_transition_ch[k]     = Challenge::from_base(xk - omega_N_inv);
 
             xk  = xk  * omega_K;
             zhc = zhc * omega_K_pow_N;
+        }
+
+        // One inversion for all selector denominators over the quotient domain.
+        // Safe: x_k ∈ gK \ H, so Z_H(x_k), x_k - 1, and x_k - omega_N^{-1} are non-zero.
+        const std::vector<Val> inversion_outputs =
+            detail::batch_multiplicative_inverse(inversion_inputs);
+
+        for (std::size_t k = 0; k < quotient_size; ++k) {
+            const Val z_h = inversion_inputs[3 * k];
+            inv_vanishing_ch[k] = Challenge::from_base(inversion_outputs[3 * k]);
+            is_first_row_ch[k] = Challenge::from_base(z_h * inversion_outputs[3 * k + 1]);
+            is_last_row_ch[k] = Challenge::from_base(z_h * inversion_outputs[3 * k + 2]);
         }
     }
 

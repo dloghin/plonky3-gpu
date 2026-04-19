@@ -46,7 +46,7 @@ class RowWindow {
 public:
     RowWindow() = default;
 
-    RowWindow(ConstRowView<T> current, ConstRowView<T> next)
+    RowWindow(std::optional<ConstRowView<T>> current, std::optional<ConstRowView<T>> next)
         : current_(current), next_(next) {}
 
     ConstRowView<T> current_slice() const {

@@ -224,50 +224,36 @@ Proof<SC> prove(SC& config,
 
     const std::size_t trace_width = air.width();
 
-    // Embed the LDE once into the extension field so each cell is lifted a
-    // single time (the quotient loop pairs row k with k_next and would
-    // otherwise call from_base twice per cell over the full domain).
-    std::vector<Challenge> trace_on_gK_ch(quotient_size * trace_width);
-    for (std::size_t k = 0; k < quotient_size; ++k) {
-        const std::size_t row_off = k * trace_width;
-        for (std::size_t c = 0; c < trace_width; ++c) {
-            trace_on_gK_ch[row_off + c] =
-                Challenge::from_base(trace_on_gK.get_unchecked(k, c));
-        }
-    }
-    trace_on_gK = p3_matrix::RowMajorMatrix<Val>();
-
-    std::vector<Challenge> preprocessed_on_gK_ch;
-    if (has_preprocessed) {
-        preprocessed_on_gK_ch.resize(quotient_size * preprocessed_width);
-        for (std::size_t k = 0; k < quotient_size; ++k) {
-            const std::size_t row_off = k * preprocessed_width;
-            for (std::size_t c = 0; c < preprocessed_width; ++c) {
-                preprocessed_on_gK_ch[row_off + c] =
-                    Challenge::from_base(preprocessed_on_gK.get_unchecked(k, c));
-            }
-        }
-        preprocessed_on_gK = p3_matrix::RowMajorMatrix<Val>();
-    }
-
     std::vector<Challenge> quotient_values(quotient_size);
     auto eval_quotient_at = [&](std::size_t k) {
         const std::size_t k_next = (k + num_quotient_chunks) % quotient_size;
-
-        const Challenge* cur_ptr = trace_on_gK_ch.data() + k * trace_width;
-        const Challenge* nxt_ptr = trace_on_gK_ch.data() + k_next * trace_width;
+        thread_local std::vector<Challenge> trace_cur;
+        thread_local std::vector<Challenge> trace_nxt;
+        trace_cur.resize(trace_width);
+        trace_nxt.resize(trace_width);
+        for (std::size_t c = 0; c < trace_width; ++c) {
+            trace_cur[c] = Challenge::from_base(trace_on_gK.get_unchecked(k, c));
+            trace_nxt[c] = Challenge::from_base(trace_on_gK.get_unchecked(k_next, c));
+        }
         MainWindow main_win(
-            p3_air::ConstRowView<Challenge>(cur_ptr, trace_width),
-            p3_air::ConstRowView<Challenge>(nxt_ptr, trace_width));
+            p3_air::ConstRowView<Challenge>(trace_cur.data(), trace_width),
+            p3_air::ConstRowView<Challenge>(trace_nxt.data(), trace_width));
 
         MainWindow pre_win;
+        thread_local std::vector<Challenge> pre_cur;
+        thread_local std::vector<Challenge> pre_nxt;
         if (has_preprocessed) {
-            const Challenge* pre_cur = preprocessed_on_gK_ch.data() + k * preprocessed_width;
-            const Challenge* pre_nxt =
-                preprocessed_on_gK_ch.data() + k_next * preprocessed_width;
+            pre_cur.resize(preprocessed_width);
+            pre_nxt.resize(preprocessed_width);
+            for (std::size_t c = 0; c < preprocessed_width; ++c) {
+                pre_cur[c] =
+                    Challenge::from_base(preprocessed_on_gK.get_unchecked(k, c));
+                pre_nxt[c] =
+                    Challenge::from_base(preprocessed_on_gK.get_unchecked(k_next, c));
+            }
             pre_win = MainWindow(
-                p3_air::ConstRowView<Challenge>(pre_cur, preprocessed_width),
-                p3_air::ConstRowView<Challenge>(pre_nxt, preprocessed_width));
+                p3_air::ConstRowView<Challenge>(pre_cur.data(), preprocessed_width),
+                p3_air::ConstRowView<Challenge>(pre_nxt.data(), preprocessed_width));
         }
 
         // Each row evaluation is independent; keep folder state thread-local.
@@ -295,6 +281,8 @@ Proof<SC> prove(SC& config,
         quotient_values[k] = eval_quotient_at(k);
     }
 #endif
+    trace_on_gK = p3_matrix::RowMajorMatrix<Val>();
+    preprocessed_on_gK = p3_matrix::RowMajorMatrix<Val>();
 
     // ---- 6. Flatten Q evals to width-D Val matrix on gK, convert to H_K ---
     constexpr std::size_t D = Challenge::DEGREE;

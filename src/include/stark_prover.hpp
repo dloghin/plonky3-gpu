@@ -112,11 +112,11 @@ Proof<SC> prove(SC& config,
     typename Pcs::InputCommitment preprocessed_commit{};
     typename Pcs::PcsProverData   preprocessed_pd_storage;
     const typename Pcs::PcsProverData* preprocessed_pd_ptr = nullptr;
-    p3_matrix::RowMajorMatrix<Val> preprocessed_copy;
     const bool has_preprocessed = preprocessed_width > 0;
     if (has_preprocessed) {
-        preprocessed_copy = *preprocessed_trace;
-        auto tmp = *preprocessed_trace;
+        // Single duplicate for PCS; quotient LDE copies from `*preprocessed_trace`
+        // only when that pass runs (see below), so we never keep two prover buffers.
+        p3_matrix::RowMajorMatrix<Val> tmp = *preprocessed_trace;
         auto [pc, ppd] = pcs.commit({{trace_domain, std::move(tmp)}});
         preprocessed_commit    = pc;
         preprocessed_pd_storage = std::move(ppd);
@@ -145,8 +145,10 @@ Proof<SC> prove(SC& config,
 
     p3_matrix::RowMajorMatrix<Val> preprocessed_on_gK;
     if (has_preprocessed) {
+        // One matrix copy into a prvalue (no second long-lived `preprocessed_copy`).
         preprocessed_on_gK = dft.coset_lde_batch(
-            std::move(preprocessed_copy), log_num_quotient_chunks, g);
+            p3_matrix::RowMajorMatrix<Val>(*preprocessed_trace),
+            log_num_quotient_chunks, g);
     }
 
     // ---- 5. Compute quotient evaluations on gK ----------------------------

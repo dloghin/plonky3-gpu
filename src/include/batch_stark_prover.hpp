@@ -70,7 +70,12 @@ BatchProof<SC> prove_batch(SC& config,
     if (n_instances == 0) {
         throw std::invalid_argument("prove_batch: no instances");
     }
-    (void)common;  // placeholder while lookup/preprocessed support is a TODO.
+    if (common.num_instances != 0 && common.num_instances != n_instances) {
+        throw std::invalid_argument("prove_batch: common.num_instances mismatch");
+    }
+    if (!common.lookups.empty() && common.lookups.size() != n_instances) {
+        throw std::invalid_argument("prove_batch: common.lookups size mismatch");
+    }
 
     Pcs& pcs = config.pcs();
 
@@ -129,6 +134,18 @@ BatchProof<SC> prove_batch(SC& config,
     for (std::size_t i = 0; i < n_instances; ++i) {
         for (const Val& v : instances[i].public_values) {
             challenger.observe_val(v);
+        }
+    }
+    if (!common.lookups.empty()) {
+        for (std::size_t i = 0; i < n_instances; ++i) {
+            for (const auto& lookup : common.lookups[i]) {
+                challenger.observe_val(Val(static_cast<uint32_t>(lookup.source_instance)));
+                challenger.observe_val(Val(static_cast<uint32_t>(lookup.source_column)));
+                challenger.observe_val(Val(static_cast<uint32_t>(lookup.table_instance)));
+                challenger.observe_val(Val(static_cast<uint32_t>(lookup.table_column)));
+                challenger.observe_val(
+                    Val(static_cast<uint32_t>(lookup.direction == LookupDirection::InputInTable ? 0 : 1)));
+            }
         }
     }
 

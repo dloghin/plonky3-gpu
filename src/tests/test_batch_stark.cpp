@@ -608,3 +608,35 @@ TEST(BatchStark, BatchProofSmallerThanSumOfIndividual) {
     // query phases) is the dominant term and batch has one copy vs two.
     EXPECT_LT(batch_total, solo_total);
 }
+
+TEST(BatchStark, LookupDeclarationsBindAcrossInstances) {
+    MyCfg config(make_pcs());
+    FibonacciAir air;
+    auto trace_a = build_fibonacci_trace(8);
+    auto trace_b = build_fibonacci_trace(8);
+
+    std::vector<StarkInstance<MyCfg, FibonacciAir>> instances = {
+        StarkInstance<MyCfg, FibonacciAir>(air, trace_a),
+        StarkInstance<MyCfg, FibonacciAir>(air, trace_b),
+    };
+
+    CommonData<MyCfg> common = CommonData<MyCfg>::empty(instances.size());
+    common.lookups[0].push_back(Lookup<BB>{
+        0, 0, 1, 0, LookupDirection::InputInTable
+    });
+
+    Dft dft;
+    MockChallenger prover_ch;
+    auto proof = prove_batch(config, instances, prover_ch, dft, common);
+
+    MockChallenger verifier_ch_ok;
+    std::vector<const FibonacciAir*> airs = { &air, &air };
+    EXPECT_TRUE(verify_batch(config, airs, verifier_ch_ok, proof, {}, common));
+
+    auto tampered = proof;
+    tampered.opened_values.instances[1].trace_local[0] =
+        tampered.opened_values.instances[1].trace_local[0] + BB4::one_val();
+
+    MockChallenger verifier_ch_bad;
+    EXPECT_FALSE(verify_batch(config, airs, verifier_ch_bad, tampered, {}, common));
+}

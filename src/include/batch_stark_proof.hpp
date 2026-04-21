@@ -29,6 +29,20 @@
 
 namespace p3_batch_stark {
 
+enum class LookupDirection : uint8_t {
+    InputInTable = 0,
+    TableInInput = 1,
+};
+
+template <typename F>
+struct Lookup {
+    std::size_t     source_instance = 0;
+    std::size_t     source_column = 0;
+    std::size_t     table_instance = 0;
+    std::size_t     table_column = 0;
+    LookupDirection direction = LookupDirection::InputInTable;
+};
+
 /// A single AIR instance to be proven within a batch.
 ///
 /// The AIR is referenced by pointer so that the caller retains ownership;
@@ -100,10 +114,13 @@ template <typename SC>
 struct CommonData {
     /// Number of instances this common data was built for.
     std::size_t num_instances = 0;
+    /// Per-instance lookup declarations.
+    std::vector<std::vector<Lookup<typename SC::Val>>> lookups;
 
     static CommonData<SC> empty(std::size_t n) {
         CommonData<SC> c;
         c.num_instances = n;
+        c.lookups.resize(n);
         return c;
     }
 };

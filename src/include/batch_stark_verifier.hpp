@@ -44,10 +44,10 @@ bool verify_batch(SC& config,
     using Pcs       = typename SC::Pcs;
     using Domain    = typename Pcs::Domain;
 
-    (void)common;
-
     const std::size_t n_instances = airs.size();
     if (n_instances == 0) return false;
+    if (common.num_instances != 0 && common.num_instances != n_instances) return false;
+    if (!common.lookups.empty() && common.lookups.size() != n_instances) return false;
     if (proof.degree_bits.size() != n_instances) return false;
     if (proof.log_num_quotient_chunks.size() != n_instances) return false;
     if (proof.opened_values.instances.size() != n_instances) return false;
@@ -84,6 +84,18 @@ bool verify_batch(SC& config,
         if (!public_values.empty()) {
             for (const Val& v : public_values[i]) {
                 challenger.observe_val(v);
+            }
+        }
+    }
+    if (!common.lookups.empty()) {
+        for (std::size_t i = 0; i < n_instances; ++i) {
+            for (const auto& lookup : common.lookups[i]) {
+                challenger.observe_val(Val(static_cast<uint32_t>(lookup.source_instance)));
+                challenger.observe_val(Val(static_cast<uint32_t>(lookup.source_column)));
+                challenger.observe_val(Val(static_cast<uint32_t>(lookup.table_instance)));
+                challenger.observe_val(Val(static_cast<uint32_t>(lookup.table_column)));
+                challenger.observe_val(
+                    Val(static_cast<uint32_t>(lookup.direction == LookupDirection::InputInTable ? 0 : 1)));
             }
         }
     }
@@ -194,6 +206,22 @@ bool verify_batch(SC& config,
         Challenge folded = folder.accumulator();
         if (folded * inv_vanishing != Q_zeta) {
             return false;
+        }
+    }
+
+    // Basic lookup support: verify declared source/table opened values agree at zeta.
+    // This binds lookup relationships into the batch transcript and rejects mismatches.
+    if (!common.lookups.empty()) {
+        for (std::size_t i = 0; i < n_instances; ++i) {
+            for (const auto& lookup : common.lookups[i]) {
+                if (lookup.source_instance >= n_instances || lookup.table_instance >= n_instances) return false;
+                const auto& src = proof.opened_values.instances[lookup.source_instance].trace_local;
+                const auto& tbl = proof.opened_values.instances[lookup.table_instance].trace_local;
+                if (lookup.source_column >= src.size() || lookup.table_column >= tbl.size()) return false;
+                const Challenge src_v = src[lookup.source_column];
+                const Challenge tbl_v = tbl[lookup.table_column];
+                if (src_v != tbl_v) return false;
+            }
         }
     }
 

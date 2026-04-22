@@ -311,8 +311,8 @@ BatchProof<SC> prove_batch(SC& config,
     proof.commitments.main = std::move(main_commit);
     proof.commitments.quotient_chunks = std::move(quotient_commit);
     proof.opening_proof = std::move(opening_proof);
-    proof.degree_bits = log_degrees;
-    proof.log_num_quotient_chunks = log_num_chunks;
+    proof.degree_bits = std::move(log_degrees);
+    proof.log_num_quotient_chunks = std::move(log_num_chunks);
 
     // opened_values[round=0][matrix=i][point=0/1][col]   -> trace local/next
     // opened_values[round=1][matrix=i][point=0][col]     -> quotient D coefs

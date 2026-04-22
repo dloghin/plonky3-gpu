@@ -172,7 +172,7 @@ BatchProof<SC> prove_batch(SC& config,
         const std::size_t qsize = quotient_sizes[i];
         const std::size_t log_qsize = log_quotient_sizes[i];
 
-        auto trace_on_gK = dft.coset_lde_batch(std::move(trace_copies[i]), log_chunks_i, g);
+        auto trace_on_gK = dft.coset_lde_batch(*instances[i].trace, log_chunks_i, g);
         if (trace_on_gK.height() != qsize) {
             throw std::runtime_error("prove_batch: unexpected LDE height");
         }

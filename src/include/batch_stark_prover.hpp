@@ -114,11 +114,8 @@ BatchProof<SC> prove_batch(SC& config,
     trace_commit_inputs.reserve(n_instances);
 
     // Keep copies of each trace for the LDE step below (PCS commit consumes the input).
-    std::vector<p3_matrix::RowMajorMatrix<Val>> trace_copies;
-    trace_copies.reserve(n_instances);
     for (std::size_t i = 0; i < n_instances; ++i) {
         Domain dom = pcs.natural_domain_for_degree(degrees[i]);
-        trace_copies.push_back(*instances[i].trace);
         trace_commit_inputs.emplace_back(dom, *instances[i].trace);
     }
     auto [main_commit, main_pd] = pcs.commit(std::move(trace_commit_inputs));

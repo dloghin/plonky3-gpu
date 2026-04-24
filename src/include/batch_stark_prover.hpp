@@ -37,11 +37,52 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
 namespace p3_batch_stark {
+
+namespace detail {
+
+template <typename T, typename = void>
+struct has_lde_and_domains : std::false_type {};
+
+template <typename T>
+struct has_lde_and_domains<T, std::void_t<
+    decltype(std::declval<const T&>().lde_matrices),
+    decltype(std::declval<const T&>().domains)>> : std::true_type {};
+
+template <typename PcsProverData, typename Domain, typename Val>
+inline const p3_matrix::RowMajorMatrix<Val>* try_get_trace_on_gk_from_pcs(
+    const PcsProverData& pd,
+    std::size_t matrix_idx,
+    std::size_t expected_height,
+    const Val& expected_shift) {
+    if constexpr (has_lde_and_domains<PcsProverData>::value) {
+        if (matrix_idx >= pd.lde_matrices.size() || matrix_idx >= pd.domains.size()) {
+            return nullptr;
+        }
+        const auto& mat = pd.lde_matrices[matrix_idx];
+        const auto& dom = pd.domains[matrix_idx];
+        if (mat.height() != expected_height) {
+            return nullptr;
+        }
+        if (dom.shift != expected_shift) {
+            return nullptr;
+        }
+        return &mat;
+    } else {
+        (void)pd;
+        (void)matrix_idx;
+        (void)expected_height;
+        (void)expected_shift;
+        return nullptr;
+    }
+}
+
+} // namespace detail
 
 /// Prove a batch of AIR instances.
 ///
@@ -113,7 +154,8 @@ BatchProof<SC> prove_batch(SC& config,
     std::vector<std::pair<Domain, p3_matrix::RowMajorMatrix<Val>>> trace_commit_inputs;
     trace_commit_inputs.reserve(n_instances);
 
-    // Keep copies of each trace for the LDE step below (PCS commit consumes the input).
+    // Materialize PCS commit inputs. If the PCS exposes compatible LDE matrices
+    // in prover data, we can reuse them for quotient evaluation below.
     for (std::size_t i = 0; i < n_instances; ++i) {
         Domain dom = pcs.natural_domain_for_degree(degrees[i]);
         trace_commit_inputs.emplace_back(dom, *instances[i].trace);
@@ -169,9 +211,17 @@ BatchProof<SC> prove_batch(SC& config,
         const std::size_t qsize = quotient_sizes[i];
         const std::size_t log_qsize = log_quotient_sizes[i];
 
-        auto trace_on_gK = dft.coset_lde_batch(*instances[i].trace, log_chunks_i, g);
+        p3_matrix::RowMajorMatrix<Val> trace_on_gK_fallback;
+        const p3_matrix::RowMajorMatrix<Val>* trace_on_gK_ptr =
+            detail::try_get_trace_on_gk_from_pcs<typename Pcs::PcsProverData, Domain, Val>(
+                main_pd, i, qsize, g);
+        if (trace_on_gK_ptr == nullptr) {
+            trace_on_gK_fallback = dft.coset_lde_batch(*instances[i].trace, log_chunks_i, g);
+            trace_on_gK_ptr = &trace_on_gK_fallback;
+        }
+        const auto& trace_on_gK = *trace_on_gK_ptr;
         if (trace_on_gK.height() != qsize) {
-            throw std::runtime_error("prove_batch: unexpected LDE height");
+            throw std::runtime_error("prove_batch: unexpected LDE height from trace LDE");
         }
 
         // Selectors at each quotient-domain point.
@@ -251,8 +301,8 @@ BatchProof<SC> prove_batch(SC& config,
         }
 #endif
 
-        // Release LDE memory before allocating the flattened quotient matrix.
-        trace_on_gK = p3_matrix::RowMajorMatrix<Val>();
+        // Release fallback LDE memory before allocating the flattened quotient matrix.
+        trace_on_gK_fallback = p3_matrix::RowMajorMatrix<Val>();
 
         // Flatten to width-D Val matrix on gK, convert to H_K so the PCS commit
         // can use `natural_domain_for_degree(K_i)` (shift = 1).

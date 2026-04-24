@@ -42,6 +42,10 @@
 #include <utility>
 #include <vector>
 
+#if defined(_OPENMP)
+#include <omp.h>
+#endif
+
 namespace p3_batch_stark {
 
 namespace detail {
@@ -265,16 +269,27 @@ BatchProof<SC> prove_batch(SC& config,
         const std::size_t trace_width = widths[i];
         std::vector<Challenge> quotient_values(qsize);
 
-        auto eval_quotient_at = [&](std::size_t k) {
+#if defined(_OPENMP)
+        const int max_threads = omp_get_max_threads();
+        std::vector<std::vector<Challenge>> trace_cur_per_thread(
+            static_cast<std::size_t>(max_threads),
+            std::vector<Challenge>(trace_width));
+        std::vector<std::vector<Challenge>> trace_nxt_per_thread(
+            static_cast<std::size_t>(max_threads),
+            std::vector<Challenge>(trace_width));
+
+#pragma omp parallel for schedule(static)
+        for (std::int64_t k_i = 0; k_i < static_cast<std::int64_t>(qsize); ++k_i) {
+            const std::size_t k = static_cast<std::size_t>(k_i);
             const std::size_t k_next = (k + num_chunks[i]) % qsize;
-            thread_local std::vector<Challenge> trace_cur;
-            thread_local std::vector<Challenge> trace_nxt;
-            trace_cur.resize(trace_width);
-            trace_nxt.resize(trace_width);
+            const int tid = omp_get_thread_num();
+            auto& trace_cur = trace_cur_per_thread[static_cast<std::size_t>(tid)];
+            auto& trace_nxt = trace_nxt_per_thread[static_cast<std::size_t>(tid)];
             for (std::size_t c = 0; c < trace_width; ++c) {
                 trace_cur[c] = Challenge::from_base(trace_on_gK.get_unchecked(k, c));
                 trace_nxt[c] = Challenge::from_base(trace_on_gK.get_unchecked(k_next, c));
             }
+
             MainWindow main_win(
                 p3_air::ConstRowView<Challenge>(trace_cur.data(), trace_width),
                 p3_air::ConstRowView<Challenge>(trace_nxt.data(), trace_width));
@@ -286,18 +301,30 @@ BatchProof<SC> prove_batch(SC& config,
             folder.set_selectors(is_first_row_ch[k], is_last_row_ch[k], is_transition_ch[k]);
             folder.reset_accumulator();
             inst.air->eval(folder);
-            return folder.accumulator() * inv_vanishing_ch[k];
-        };
-
-#if defined(_OPENMP)
-#pragma omp parallel for schedule(static)
-        for (std::int64_t k_i = 0; k_i < static_cast<std::int64_t>(qsize); ++k_i) {
-            quotient_values[static_cast<std::size_t>(k_i)] =
-                eval_quotient_at(static_cast<std::size_t>(k_i));
+            quotient_values[k] = folder.accumulator() * inv_vanishing_ch[k];
         }
 #else
+        std::vector<Challenge> trace_cur(trace_width);
+        std::vector<Challenge> trace_nxt(trace_width);
         for (std::size_t k = 0; k < qsize; ++k) {
-            quotient_values[k] = eval_quotient_at(k);
+            const std::size_t k_next = (k + num_chunks[i]) % qsize;
+            for (std::size_t c = 0; c < trace_width; ++c) {
+                trace_cur[c] = Challenge::from_base(trace_on_gK.get_unchecked(k, c));
+                trace_nxt[c] = Challenge::from_base(trace_on_gK.get_unchecked(k_next, c));
+            }
+
+            MainWindow main_win(
+                p3_air::ConstRowView<Challenge>(trace_cur.data(), trace_width),
+                p3_air::ConstRowView<Challenge>(trace_nxt.data(), trace_width));
+            MainWindow pre_win;  // no preprocessed support in this port.
+
+            Folder folder;
+            folder.set_alpha(alpha);
+            folder.set_windows(main_win, pre_win);
+            folder.set_selectors(is_first_row_ch[k], is_last_row_ch[k], is_transition_ch[k]);
+            folder.reset_accumulator();
+            inst.air->eval(folder);
+            quotient_values[k] = folder.accumulator() * inv_vanishing_ch[k];
         }
 #endif
 

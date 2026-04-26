@@ -393,9 +393,9 @@ BatchProof<SC> prove_batch(SC& config,
     proof.opened_values.instances.resize(n_instances);
     for (std::size_t i = 0; i < n_instances; ++i) {
         auto& out = proof.opened_values.instances[i];
-        out.trace_local = opened_values[0][i][0];
-        out.trace_next  = opened_values[0][i][1];
-        out.quotient_chunks = opened_values[1][i][0];
+        out.trace_local = std::move(opened_values[0][i][0]);
+        out.trace_next  = std::move(opened_values[0][i][1]);
+        out.quotient_chunks = std::move(opened_values[1][i][0]);
     }
     return proof;
 }

@@ -197,8 +197,7 @@ BatchProof<SC> prove_batch(SC& config,
 
     // ---- 5. Compute quotient evaluations for each instance -----------------
     // Each quotient is committed as a width-D base matrix on H_{K_i} (shift=1).
-    std::vector<std::pair<Domain, p3_matrix::RowMajorMatrix<Val>>> quotient_commit_inputs;
-    quotient_commit_inputs.reserve(n_instances);
+    std::vector<std::pair<Domain, p3_matrix::RowMajorMatrix<Val>>> quotient_commit_inputs(n_instances);
 
     constexpr std::size_t D = Challenge::DEGREE;
     const Val g = Val::generator();
@@ -207,7 +206,11 @@ BatchProof<SC> prove_batch(SC& config,
     using Folder = p3_uni_stark::ConstraintFolder<Val, Challenge>;
     using MainWindow = typename Folder::MainWindow;
 
-    for (std::size_t i = 0; i < n_instances; ++i) {
+    #if defined(_OPENMP)
+#pragma omp parallel for schedule(static)
+    #endif
+    for (std::int64_t i_i = 0; i_i < static_cast<std::int64_t>(n_instances); ++i_i) {
+        const std::size_t i = static_cast<std::size_t>(i_i);
         const auto& inst = instances[i];
         const std::size_t deg = degrees[i];
         const std::size_t log_deg = log_degrees[i];
@@ -270,63 +273,67 @@ BatchProof<SC> prove_batch(SC& config,
         std::vector<Challenge> quotient_values(qsize);
 
 #if defined(_OPENMP)
-        const int max_threads = omp_get_max_threads();
-        std::vector<std::vector<Challenge>> trace_cur_per_thread(
-            static_cast<std::size_t>(max_threads),
-            std::vector<Challenge>(trace_width));
-        std::vector<std::vector<Challenge>> trace_nxt_per_thread(
-            static_cast<std::size_t>(max_threads),
-            std::vector<Challenge>(trace_width));
+        const bool enable_inner_parallel = !omp_in_parallel();
+        if (enable_inner_parallel) {
+            const int max_threads = omp_get_max_threads();
+            std::vector<std::vector<Challenge>> trace_cur_per_thread(
+                static_cast<std::size_t>(max_threads),
+                std::vector<Challenge>(trace_width));
+            std::vector<std::vector<Challenge>> trace_nxt_per_thread(
+                static_cast<std::size_t>(max_threads),
+                std::vector<Challenge>(trace_width));
 
 #pragma omp parallel for schedule(static)
-        for (std::int64_t k_i = 0; k_i < static_cast<std::int64_t>(qsize); ++k_i) {
-            const std::size_t k = static_cast<std::size_t>(k_i);
-            const std::size_t k_next = (k + num_chunks[i]) % qsize;
-            const int tid = omp_get_thread_num();
-            auto& trace_cur = trace_cur_per_thread[static_cast<std::size_t>(tid)];
-            auto& trace_nxt = trace_nxt_per_thread[static_cast<std::size_t>(tid)];
-            for (std::size_t c = 0; c < trace_width; ++c) {
-                trace_cur[c] = Challenge::from_base(trace_on_gK.get_unchecked(k, c));
-                trace_nxt[c] = Challenge::from_base(trace_on_gK.get_unchecked(k_next, c));
+            for (std::int64_t k_i = 0; k_i < static_cast<std::int64_t>(qsize); ++k_i) {
+                const std::size_t k = static_cast<std::size_t>(k_i);
+                const std::size_t k_next = (k + num_chunks[i]) % qsize;
+                const int tid = omp_get_thread_num();
+                auto& trace_cur = trace_cur_per_thread[static_cast<std::size_t>(tid)];
+                auto& trace_nxt = trace_nxt_per_thread[static_cast<std::size_t>(tid)];
+                for (std::size_t c = 0; c < trace_width; ++c) {
+                    trace_cur[c] = Challenge::from_base(trace_on_gK.get_unchecked(k, c));
+                    trace_nxt[c] = Challenge::from_base(trace_on_gK.get_unchecked(k_next, c));
+                }
+
+                MainWindow main_win(
+                    p3_air::ConstRowView<Challenge>(trace_cur.data(), trace_width),
+                    p3_air::ConstRowView<Challenge>(trace_nxt.data(), trace_width));
+                MainWindow pre_win;  // no preprocessed support in this port.
+
+                Folder folder;
+                folder.set_alpha(alpha);
+                folder.set_windows(main_win, pre_win);
+                folder.set_selectors(is_first_row_ch[k], is_last_row_ch[k], is_transition_ch[k]);
+                folder.reset_accumulator();
+                inst.air->eval(folder);
+                quotient_values[k] = folder.accumulator() * inv_vanishing_ch[k];
             }
-
-            MainWindow main_win(
-                p3_air::ConstRowView<Challenge>(trace_cur.data(), trace_width),
-                p3_air::ConstRowView<Challenge>(trace_nxt.data(), trace_width));
-            MainWindow pre_win;  // no preprocessed support in this port.
-
-            Folder folder;
-            folder.set_alpha(alpha);
-            folder.set_windows(main_win, pre_win);
-            folder.set_selectors(is_first_row_ch[k], is_last_row_ch[k], is_transition_ch[k]);
-            folder.reset_accumulator();
-            inst.air->eval(folder);
-            quotient_values[k] = folder.accumulator() * inv_vanishing_ch[k];
-        }
-#else
-        std::vector<Challenge> trace_cur(trace_width);
-        std::vector<Challenge> trace_nxt(trace_width);
-        for (std::size_t k = 0; k < qsize; ++k) {
-            const std::size_t k_next = (k + num_chunks[i]) % qsize;
-            for (std::size_t c = 0; c < trace_width; ++c) {
-                trace_cur[c] = Challenge::from_base(trace_on_gK.get_unchecked(k, c));
-                trace_nxt[c] = Challenge::from_base(trace_on_gK.get_unchecked(k_next, c));
-            }
-
-            MainWindow main_win(
-                p3_air::ConstRowView<Challenge>(trace_cur.data(), trace_width),
-                p3_air::ConstRowView<Challenge>(trace_nxt.data(), trace_width));
-            MainWindow pre_win;  // no preprocessed support in this port.
-
-            Folder folder;
-            folder.set_alpha(alpha);
-            folder.set_windows(main_win, pre_win);
-            folder.set_selectors(is_first_row_ch[k], is_last_row_ch[k], is_transition_ch[k]);
-            folder.reset_accumulator();
-            inst.air->eval(folder);
-            quotient_values[k] = folder.accumulator() * inv_vanishing_ch[k];
-        }
+        } else
 #endif
+        {
+            std::vector<Challenge> trace_cur(trace_width);
+            std::vector<Challenge> trace_nxt(trace_width);
+            for (std::size_t k = 0; k < qsize; ++k) {
+                const std::size_t k_next = (k + num_chunks[i]) % qsize;
+                for (std::size_t c = 0; c < trace_width; ++c) {
+                    trace_cur[c] = Challenge::from_base(trace_on_gK.get_unchecked(k, c));
+                    trace_nxt[c] = Challenge::from_base(trace_on_gK.get_unchecked(k_next, c));
+                }
+
+                MainWindow main_win(
+                    p3_air::ConstRowView<Challenge>(trace_cur.data(), trace_width),
+                    p3_air::ConstRowView<Challenge>(trace_nxt.data(), trace_width));
+                MainWindow pre_win;  // no preprocessed support in this port.
+
+                Folder folder;
+                folder.set_alpha(alpha);
+                folder.set_windows(main_win, pre_win);
+                folder.set_selectors(is_first_row_ch[k], is_last_row_ch[k], is_transition_ch[k]);
+                folder.reset_accumulator();
+                inst.air->eval(folder);
+                quotient_values[k] = folder.accumulator() * inv_vanishing_ch[k];
+            }
+        }
 
         // Release fallback LDE memory before allocating the flattened quotient matrix.
         trace_on_gK_fallback = p3_matrix::RowMajorMatrix<Val>();
@@ -344,7 +351,7 @@ BatchProof<SC> prove_batch(SC& config,
             std::move(qmat_on_gK), g, dft);
 
         Domain quotient_commit_domain{ log_qsize, Val::one_val() };
-        quotient_commit_inputs.emplace_back(quotient_commit_domain, std::move(qmat_on_HK));
+        quotient_commit_inputs[i] = std::make_pair(quotient_commit_domain, std::move(qmat_on_HK));
     }
 
     // ---- 6. Commit all quotient matrices in a single PCS commit ------------

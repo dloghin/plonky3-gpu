@@ -293,9 +293,9 @@ public:
         }
         std::vector<CircleDomain> out;
         out.reserve(num_chunks);
-        auto pts = points();
+        const std::size_t step = std::size_t{1} << (log_n - log_chunks);
         for (std::size_t i = 0; i < num_chunks; ++i) {
-            out.emplace_back(log_n - log_chunks, pts[i]);
+            out.emplace_back(log_n - log_chunks, at(i * step));
         }
         return out;
     }
